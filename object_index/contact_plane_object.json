@@ -1,0 +1,16 @@
+{"test": ["024_bowl_1.0.json", "005_tomato_soup_can_1.0.json", "025_mug_1.0.json"],
+ "train": ["003_cracker_box_1.0.json","004_sugar_box_1.0.json","005_tomato_soup_can_1.0.json", "006_mustard_bottle_1.0.json",
+ "021_bleach_cleanser_1.0.json","019_pitcher_base_1.0.json","010_potted_meat_can_1.0.json","024_bowl_1.0.json",
+ "025_mug_1.0.json","061_foam_brick_1.0.json"],
+ "tomato": ["005_tomato_soup_can_1.0.json"],
+ "mustard": ["006_mustard_bottle_1.0.json"],
+ "mug": ["025_mug_1.0.json"],
+ "024_bowl_1.0": ["024_bowl_1.0.json"],
+ "005_tomato_soup_can_1.0": ["005_tomato_soup_can_1.0.json"],
+ "025_mug_1.0": ["025_mug_1.0.json"],
+ "bleach_cleanser": ["021_bleach_cleanser_1.0.json"],
+ "BBQSauce_1.0": ["BBQSauce_1.0.json"],
+ "Milk_1.0": ["Milk_1.0.json"],
+ "Mustard_1.0": ["Mustard_1.0.json"],
+ "test_dataset": ["BBQSauce_1.0.json", "Milk_1.0.json", "Mustard_1.0.json", "005_tomato_soup_can_1.0.json"]
+}

@@ -1,0 +1,16 @@
+# 常規依賴包
+pybullet
+numpy
+scikit-learn
+open3d
+PyYAML
+tabulate
+easydict
+transforms3d
+gputil
+
+# 請手動執行以下命令：
+# git clone https://github.com/erikwijmans/Pointnet2_PyTorch.git
+# cd Pointnet2_PyTorch
+# pip install -r requirements.txt
+

@@ -1,0 +1,4 @@
+<launch>
+    <node name="pybullet_node" pkg="pybullet_ros" type="ros_execution_final.py" output="screen"/>
+    <node name="placing_node" pkg="pybullet_ros" type="placing_checker.py" output="screen" respawn="true" respawn_delay="5"/>
+</launch>
