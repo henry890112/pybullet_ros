@@ -800,6 +800,20 @@ class SimulatedYCBEnv():
             return True
         return False
 
+    #Henry reset the placed object
+    def _reset_placed_objects(self):
+        pos = [-1, 0, 0]
+        orn = [0, 0, 0, 1]
+
+        p.resetBasePositionAndOrientation(self._objectUids[self.target_idx],
+                                            [pos[0], pos[1], pos[2]], [orn[0], orn[1], orn[2], orn[3]]) 
+        p.resetBaseVelocity(
+            self._objectUids[self.target_idx], (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
+        )
+        print("------------------reset placed object!")
+        for _ in range(400):
+            p.stepSimulation()
+
     def _randomly_place_objects_pack(self, urdfList, scale, if_stack=True, single_release=False, place_target_matrix = None):
         '''
         Input:
@@ -933,7 +947,7 @@ class SimulatedYCBEnv():
                     self.target_name = urdfList[i].split('/')[-2]
                     z_init = -.26 + 2 * self.object_heights[self.target_idx]
                     #Henry 20240401 更改掉落角度, 比較不會碰撞
-                    orn = p.getQuaternionFromEuler([0, np.random.uniform(0, np.pi), 0])
+                    orn = p.getQuaternionFromEuler([0, np.random.uniform(0, np.pi/2), 0])
                     p.resetBasePositionAndOrientation(self._objectUids[self.target_idx],
                                                       [xpos, ypos,  z_init - self._shift[2]],
                                                       [orn[0], orn[1], orn[2], orn[3]])
@@ -975,7 +989,7 @@ class SimulatedYCBEnv():
             # 定義新的顏色，RGBA 格式
             if place_target_matrix is not None:
                 print("place_target_matrix is not None")
-                new_color = [1, 1, 1, 0.5]  # 不透明
+                new_color = [1, 1, 1, 0.8]  # 不透明
             else:
                 print("place_target_matrix is None")
                 new_color = [1, 1, 1, 1]  # 原始顏色
@@ -1032,11 +1046,12 @@ class SimulatedYCBEnv():
             # x_rot = 0  # let the object fall from this rotation
             # y_rot = np.pi*0.75# 135 degree
             # z_rot = 0
-
-            # xyz照順序轉
-            x_rot = np.random.uniform(-np.pi, np.pi)  # let the object fall from this rotation
-            y_rot = np.random.uniform(-np.pi, np.pi)
-            z_rot = np.random.uniform(-np.pi, np.pi)
+                        
+            # zyx照順序轉
+            x_rot = 0  # let the object fall from this rotation
+            y_rot = np.random.uniform(0, np.pi/2)
+            # 限制z在+-135
+            z_rot = np.random.uniform(-np.pi/4*3, np.pi/4*3)
 
 
             print("x_rot: ", x_rot)
@@ -1057,6 +1072,11 @@ class SimulatedYCBEnv():
             p.resetBaseVelocity(
                 self._objectUids[self.target_idx], (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
             )
+            # Henry 20240428可以是掉落物體的pose
+            # time.sleep(1)
+            # # get target object's pose
+            # targetPose = self._get_ef_pose(mat=True)@ self._get_target_relative_pose(option = 'ef')
+            # self.draw_ef_coordinate(targetPose)
             # Henry 可以跟改simulated時間
             for _ in range(5000):
                 p.stepSimulation()

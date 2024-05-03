@@ -341,8 +341,8 @@
       <friction_anchor/>
       <stiffness value="30000.0"/>
       <damping value="1000.0"/>
-      <spinning_friction value="5.0"/>
-      <lateral_friction value="5.0"/>
+      <spinning_friction value="10.0"/>
+      <lateral_friction value="3.0"/>
     </contact>
     <inertial>
       <mass value="0.02"/>
@@ -497,8 +497,8 @@
       <friction_anchor/>
       <stiffness value="30000.0"/>
       <damping value="1000.0"/>
-      <spinning_friction value="5.0"/>
-      <lateral_friction value="5.0"/>
+      <spinning_friction value="10.0"/>
+      <lateral_friction value="3.0"/>
     </contact>
     <inertial>
       <mass value="0.02"/>

@@ -34,12 +34,19 @@ class ExecutionNode:
         self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
         rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=30)
         self.execute = rospy.get_param('~execute', False)
+        self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', True)
+        self.test_num = rospy.get_param('~test_num', 100)
+        self.object_record_init()
+        self.placed_obj = None
+        self.path_length = 20
+
+
 
     def initial(self):
         
         '放置物體相關 data'
-        self.placed_name = None
-        self.placed_obj = None
+        self.placed_name = None  # 一個list
+        self.target_placed_name = None # 一個target name
         self.target_object = None # 會在find_closet_target中被賦值
         self.poseEstimate = None
         self.target_pose_world = None
@@ -60,21 +67,6 @@ class ExecutionNode:
         self.pc_segments_noise_path = None
 
         '場景設置相關 data'
-        # stage2 是最上面的貨價
-        self.placing_stage = 2
-        self.num_object = 1
-        self.single_release =True
-        self.if_stack = True
-        self.vis_draw_coordinate = False
-        self.cabinet_pose_world = None
-        self.place_pose_world = None
-
-
-        'ros 傳輸相關 data'
-        self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
-        rospy.wait_for_service('contact_graspnet/get_grasp_result')
-
-
         '''
         single release: (只在num_object = 1有用) true為以自己設定的角度放在桌上; (多object也可用)false就是pack放在桌上
         if_stack: false代表旁邊有東西會擋住掉落下來的物體
@@ -85,7 +77,19 @@ class ExecutionNode:
         single_release/if_stack = f/f: 丟物體在桌上 有遮擋
         single_release/if_stack = t/f: 丟物體在桌上 有遮擋
         '''
+        # stage2 是最上面的貨價
+        self.placing_stage = 2
+        self.num_object = 2
+        # self.single_release =True
+        # self.if_stack = True
+        self.single_release =True
+        self.if_stack = False
+        self.cabinet_pose_world = None
+        self.place_pose_world = None
 
+        'ros 傳輸相關 data'
+        self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
+        rospy.wait_for_service('contact_graspnet/get_grasp_result')
 
         ### 將open3d下的點雲轉到world座標
         self.world_frame_pose = np.array([[ 1.,    0.,    0.,   -0.05],
@@ -144,7 +148,7 @@ class ExecutionNode:
             ef_pose_list = [0, 0, 0, 0, 0, 0, 1]
         goal_pos = [*goal_pose[:3], *ros_quat(goal_pose[3:])]
 
-        solver = self.planner.plan(ef_pose_list, goal_pos, path_length=30)
+        solver = self.planner.plan(ef_pose_list, goal_pos, path_length=self.path_length)
         if visual:
             self.path_visulization(solver)
         path = solver.getSolutionPath().getStates()
@@ -215,14 +219,12 @@ class ExecutionNode:
         first_time = True
         while(target_on_table < self.num_object):
             state = self.env.cabinet(save=False, reset_free=True, num_object=self.num_object, if_stack=self.if_stack, single_release=self.single_release)
-            if(first_time):
-                first_time = False
-                self.placed_obj = {}
-                placed_idx = np.where(np.array(self.env.placed_objects))[0]
-                self.placed_name = np.array(self.env.obj_indexes)[np.where(np.array(self.env.placed_objects))]
-                for i in range(self.    num_object):
-                    self.placed_obj[placed_idx[i]] = self.placed_name[i]
-                print(self.placed_obj)
+            self.placed_obj = {}
+            placed_idx = np.where(np.array(self.env.placed_objects))[0]
+            self.placed_name = np.array(self.env.obj_indexes)[np.where(np.array(self.env.placed_objects))]
+            for i in range(self.num_object):
+                self.placed_obj[placed_idx[i]] = self.placed_name[i]
+            print("self.placed_obj!!!!!!!!!!!!!!!", self.placed_obj)
             target_on_table = 0
             for i, index in enumerate(self.placed_obj.keys()):
                 self.placed_name = self.placed_obj[index]
@@ -232,6 +234,13 @@ class ExecutionNode:
                 target_z_height = self.target_pose_world[2, 3]
                 if target_z_height > -0.7:
                     target_on_table += 1
+
+    def get_placed_obj(self):
+        placed_idx = np.where(np.array(self.env.placed_objects))[0]
+        self.placed_name = np.array(self.env.obj_indexes)[np.where(np.array(self.env.placed_objects))]
+        for i in range(self.    num_object):
+            self.placed_obj[placed_idx[i]] = self.placed_name[i]
+        print("==============self.placed_obj!!!!!!!!!!!!!!!", self.placed_obj)
     
     def get_multiview_data(self):
         execute = False
@@ -251,7 +260,7 @@ class ExecutionNode:
             self.execute_motion_plan(self.env, plan, execute=execute, gripper_set="open", repeat=200)
             checker = check_pose_difference(self.env._get_ef_pose(mat=True), END_POINT, tolerance=0.04)
             print(f"{view_name} checker: {checker}")
-            save_observation_images(save_path, self.env, self.placed_obj, multiview_index)
+            save_observation_images(save_path, self.env, self.placed_obj, multiview_index, visual=False)
             self.env._panda.reset()
 
 
@@ -400,8 +409,9 @@ class ExecutionNode:
             # ground truth
             self.target_pose_world = self.env._get_ef_pose(mat=True)@ self.env._get_target_relative_pose(option = 'ef')
             # rotate the target pose if the x of the target pose inner product with the x of the ef pose is negative
-            print(self.placed_name)
-            if "025_mug_1.0" in self.placed_name or '021_bleach_cleanser_1.0' in self.placed_name:
+            print("===========target!!!!!!!!!!", self.target_placed_name)
+            if self.target_placed_name == "025_mug_1.0" or self.target_placed_name == '021_bleach_cleanser_1.0':
+            # if "025_mug_1.0" in self.placed_name or '021_bleach_cleanser_1.0' in self.placed_name:
                 # rotate 90 degree around z axis of the target pose
                 self.target_pose_world[:3, :3] = self.target_pose_world[:3, :3]@ np.array([[0, -1, 0],
                                                                                 [1, 0, 0],
@@ -439,7 +449,7 @@ class ExecutionNode:
         # stage2
         cabinet_pose_world_stage2[0, 3] += 0.
         cabinet_pose_world_stage2[1, 3] += -0.3
-        cabinet_pose_world_stage2[2, 3] += 0.5
+        cabinet_pose_world_stage2[2, 3] += 0.4
 
         # chose the cabinet pose
         if self.placing_stage == 1:
@@ -460,7 +470,10 @@ class ExecutionNode:
     def tranfrom_grasp_to_place(self):
         pred_grasps_cam = np.load(os.path.join(self.parent_directory, 'results/pred_grasps_cam.npy'), allow_pickle=True)
         scores = np.load(os.path.join(self.parent_directory, 'results/scores.npy'), allow_pickle=True)
-        new_pred_grasps_cam = self.init_ef_mat@ np.linalg.inv(self.cam_offset)@ pred_grasps_cam
+        if len(pred_grasps_cam) == 0:
+            print("No valid grasp found")
+        else:
+            new_pred_grasps_cam = self.init_ef_mat@ np.linalg.inv(self.cam_offset)@ pred_grasps_cam
         new_pred_grasps_cam_place = np.zeros_like(new_pred_grasps_cam)
         for i in range(new_pred_grasps_cam.shape[0]):
             relative_grasp_transform = np.linalg.inv(self.target_pose_world)@ new_pred_grasps_cam[i]
@@ -474,57 +487,107 @@ class ExecutionNode:
         self.final_grasp_pose = self.target_pose_world@ relative_grasp_transform
         print("final_grasp_pose = \n", self.final_grasp_pose)
 
-    def execute_motion_and_check_pose(self, env, END_POINT, tolerance=0.04, gripper_state="open", repeat=150, visual_time=None):
+    def execute_motion_and_check_pose(self, END_POINT, tolerance=0.04, gripper_state="open", repeat=150, visual_time=None):
         """
         執行動作計畫並檢查最後位姿是否正確。不正確則停5秒
         """
         execute = True
         if self.vis_draw_coordinate:
-            env.draw_ef_coordinate(END_POINT, visual_time)
+            self.env.draw_ef_coordinate(END_POINT, 5)
         plan = self.expert_plan(pack_pose(END_POINT), world=True, visual=False)
-        _ = self.execute_motion_plan(env, plan, execute=execute, gripper_set=gripper_state, repeat=repeat)
-        checker = check_pose_difference(env._get_ef_pose(mat=True), END_POINT, tolerance)
+        _ = self.execute_motion_plan(self.env, plan, execute=execute, gripper_set=gripper_state, repeat=repeat)
+        checker = check_pose_difference(self.env._get_ef_pose(mat=True), END_POINT, tolerance)
         if not checker:
             print("位姿不正確，請檢查位姿")
             time.sleep(5)
         print("=====================================================")
 
     def execute_robot_motion(self):
+        # set the poses of the robot
         self.final_grasp_pose_z_bias = adjust_pose_with_bias(self.final_grasp_pose, -0.1, option="ef")
         if self.placing_stage == 1:
-            self.mid_retract_pose = transZ(-0.)@ transX(0.3)@ transY(0.2)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            self.mid_retract_pose = transZ(-0.1)@ transX(0.3)@ transY(0.2)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
         elif self.placing_stage == 2:
-            self.mid_retract_pose = transZ(-0.)@ transX(0.3)@ transY(0.2)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            self.mid_retract_pose = transZ(-0.1)@ transX(0.3)@ transY(0.2)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
         self.final_place_pose_z_bias_top = adjust_pose_with_bias(self.final_place_grasp_pose, 0.10, option="world")
         self.final_place_pose_z_bias_placing = adjust_pose_with_bias(self.final_place_grasp_pose, 0.015, option="world")
-        self.final_place_pose_z_bias_release = adjust_pose_with_bias(self.final_place_grasp_pose, -0.2, option="ef")
-        self.execute_motion_and_check_pose(self.env, self.final_grasp_pose_z_bias, gripper_state="open")
+        self.final_place_pose_z_bias_release = adjust_pose_with_bias(self.final_place_grasp_pose, -0.1, option="ef")
+
+        # start execute the setting poses
+        self.execute_motion_and_check_pose(self.final_grasp_pose_z_bias, gripper_state="open")
+        img = ImageGrab.grab()
+        random = np.random.randint(0, 1000)
+        img.save(os.path.join(self.parent_directory, f'results/scene_grasp_{random}.png'))
         time.sleep(1)
         for i in range(10):
             _ = self.env.step([0, 0, 0.1/10, 0, 0, 0], repeat=100)
-        reward = self.env.retract()
-        print(f"reward: {reward}")
-        self.execute_motion_and_check_pose(self.env, self.mid_retract_pose, tolerance = 0.1, gripper_state="close")
+        self.reward_checker = self.retract()
+        if not self.reward_checker:
+            self.grasp_fail_rate += 1
+            return
+        self.execute_motion_and_check_pose(self.mid_retract_pose, tolerance = 0.1, gripper_state="close", repeat=100)
         img = ImageGrab.grab()
         random = np.random.randint(0, 1000)
         img.save(os.path.join(self.parent_directory, f'results/scene_mid_{random}.png'))
-        self.execute_motion_and_check_pose(self.env, self.final_place_pose_z_bias_top, gripper_state="close")
-        self.execute_motion_and_check_pose(self.env, self.final_place_pose_z_bias_placing, gripper_state="close", repeat=100)
+        self.execute_motion_and_check_pose(self.final_place_pose_z_bias_top, gripper_state="close")
+        self.execute_motion_and_check_pose(self.final_place_pose_z_bias_placing, gripper_state="close", repeat=100)
         move_gripper_smoothly(self.env, p, 0.0, 0.085)  # open
-        self.execute_motion_and_check_pose(self.env, self.final_place_pose_z_bias_release, gripper_state="open", repeat=100)
+        self.execute_motion_and_check_pose(self.final_place_pose_z_bias_release, gripper_state="open", repeat=50)
         img = ImageGrab.grab()
         random = np.random.randint(0, 1000)
-        img.save(os.path.join(self.parent_directory, f'results/scene_{random}.png'))
+        img.save(os.path.join(self.parent_directory, f'results/scene_place_{random}.png'))
+
+    def retract(self):
+        """
+        Move the arm to lift the object.
+        """
+        reward = 0
+        cur_joint = np.array(self.env._panda.getJointStates()[0])
+        cur_joint[-1] = 0.8  # close finger
+        observations = [self.env.step(cur_joint, repeat=300, config=True, vis=False)[0]]
+        pos, orn = p.getLinkState(self.env._panda.pandaUid, self.env._panda.pandaEndEffectorIndex)[4:6]
+
+        for i in range(10):
+            pos = (pos[0], pos[1], pos[2] + 0.02)
+            jointPoses = np.array(p.calculateInverseKinematics(self.env._panda.pandaUid,
+                                                               self.env._panda.pandaEndEffectorIndex, pos,
+                                                               maxNumIterations=500,
+                                                               residualThreshold=1e-8))
+            jointPoses[6] = 0.85
+            jointPoses = jointPoses[:7].copy()
+            obs = self.env.step(jointPoses, config=True)[0]
+        self.reward_checker = self.grasp_reward(self.env.target_idx)
+        if self.reward_checker:
+            print("Grasp successfully")
+            reward = 1
+            return reward
+        else:
+            print("Grasp failed")
+            return reward
+
+    
+    def grasp_reward(self, closest_target_index):
+        '''
+        check for success grasping or nor
+        success: return True
+        fail: return False
+        '''
+        self.env.target_idx = closest_target_index
+        init_target_height = self.target_pose_world[2, 3]
+        end_target_height = self.env._get_ef_pose(mat=True)@ self.env._get_target_relative_pose(option = 'ef')
+        if end_target_height[2, 3] - init_target_height > 0.08:
+            return True
+        return False
 
 
-    def final_reward(self, env, closest_target_index):
+    def final_reward(self, closest_target_index):
         '''
         check for success placing or nor
         success: return True
         fail: return False
         '''
-        env.target_idx = closest_target_index
-        target_final = env._get_ef_pose(mat=True)@ env._get_target_relative_pose(option = 'ef')
+        self.env.target_idx = closest_target_index
+        target_final = self.env._get_ef_pose(mat=True)@ self.env._get_target_relative_pose(option = 'ef')
         # check the z axis of the target_final with the [0, 0, 1] vector
         z_axis_target = target_final[:3, 2]
         z_axis_target = z_axis_target/np.linalg.norm(z_axis_target)
@@ -536,47 +599,112 @@ class ExecutionNode:
             print("The target is vertical to the ground")
             return True
     
+    def object_record_init(self):
+        file = os.path.join(self.parent_directory, "object_index", 'contact_plane_object.json')
+        with open(file) as f:
+            file_dir = json.load(f)
+        file_dir = file_dir['test_dataset']
+        file_dir = [f[:-5] for f in file_dir]
+        test_file_dir = list(set(file_dir))
+        self.success_rates = {}
+        for filename in test_file_dir:
+            # 將標準化後的名稱用來初始化計數
+            self.success_rates[filename] = {"total": 0, "successful": 0, "no_grasp_pose": 0}
+
+    def object_record(self, target_name, no_grasp=False, success_bool=False):
+
+        self.success_rates[target_name]["total"] += 1
+        if success_bool:         
+            self.success_rates[target_name]["successful"] += 1
+        if no_grasp:
+            self.success_rates[target_name]["no_grasp_pose"] += 1
+
+        with open(os.path.join(self.parent_directory, 'results/obejct_record.txt'), 'a') as f:
+            f.write(f"target_name: {target_name}\n")
+            f.write(f"total: {self.success_rates[target_name]['total']}\n")
+            f.write(f"successful: {self.success_rates[target_name]['successful']}\n")
+            f.write(f"no_grasp_pose: {self.success_rates[target_name]['no_grasp_pose']}\n")
+            f.write(f"success_rate: {self.success_rates[target_name]['successful']/self.success_rates[target_name]['total']}\n")
+            f.write("=====================================================\n")
+    
+    def remove_target_object(self):
+        # remove the self.env.target_idx
+        self.placed_obj.pop(self.env.target_idx)
+        print("================", self.placed_obj)
+        self.env._reset_placed_objects()
+        print("===================", self.placed_obj)
+
     def run(self):
-        test_num = 30
+        self.grasp_fail_rate = 0
         success_rate = 0
+        no_grasp_pose_rate = 0
         while not rospy.is_shutdown():
             self.load_environment()
-            for i in range(test_num):
-                # 目前成功次數/i
-                print(f"======success_count: {success_rate}/{i}======")
+            test_index = 0
+            for i in range(1, self.test_num + 1):
                 self.initial()
                 self.check_scene()
-                self.get_multiview_data()
-                closest_target_index, target_object = self.find_closet_target()
-                target_placed_name = self.placed_obj[closest_target_index]
-                time.sleep(3) 
-                tcp_utils.send_target_name('127.0.0.1', 11111, target_placed_name)
-                time.sleep(3)
-                self.get_multiview_pcd(target_object)
-                self.gernerate_grasp()
-                self.get_target_6d_pose(closest_target_index)
-                self.get_the_target_on_cabinet_pose()
-                self.tranfrom_grasp_to_place()
-                time.sleep(5)
-                tcp_utils.send_checker('127.0.0.1', 22222) 
-                time.sleep(3) 
-                final_place_target_matrix = self.place_pose_world@ get_rotation_matrix_z_4x4(-self.result_z_rotation_angle/90)
-                tcp_utils.send_matrix('127.0.0.1', 33333, final_place_target_matrix)
-                time.sleep(1)
-                tcp_utils.send_matrix('127.0.0.1', 55557, self.place_pose_world)
-                time.sleep(1)
-                tcp_utils.send_matrix('127.0.0.1', 56599, self.target_pose_world)
-                self.final_place_grasp_pose = tcp_utils.start_server('127.0.0.1', 44411)
-                if np.array_equal(self.final_place_grasp_pose, np.eye(4)):
-                    print("The placing mode is not success")
-                    continue
-                self.tranfrom_place_to_grasp()
-                self.env._panda.reset()
-                self.execute_robot_motion()
-                success = self.final_reward(self.env, closest_target_index)
-                if success:
-                    success_rate += 1
-            print(f"success_rate: {success_rate/test_num}")
+                
+                for j in range (self.num_object):
+                    self.initial()
+                    test_index += 1
+                    self.get_multiview_data()
+                    closest_target_index, target_object = self.find_closet_target()
+                    self.target_placed_name = self.placed_obj[closest_target_index]
+                    time.sleep(3) 
+                    tcp_utils.send_target_name('127.0.0.1', 19111, self.target_placed_name)
+                    time.sleep(3)
+                    self.get_multiview_pcd(target_object)
+                    self.gernerate_grasp()
+                    self.get_target_6d_pose(closest_target_index)
+                    self.get_the_target_on_cabinet_pose()
+                    self.tranfrom_grasp_to_place()
+                    time.sleep(4)
+                    tcp_utils.send_checker('127.0.0.1', 12346) 
+                    time.sleep(3) 
+                    final_place_target_matrix = self.place_pose_world@ get_rotation_matrix_z_4x4(-self.result_z_rotation_angle/90)
+                    tcp_utils.send_matrix('127.0.0.1', 33333, final_place_target_matrix)
+                    time.sleep(1)
+                    tcp_utils.send_matrix('127.0.0.1', 55557, self.place_pose_world)
+                    time.sleep(1)
+                    tcp_utils.send_matrix('127.0.0.1', 56471, self.target_pose_world)
+                    self.final_place_grasp_pose = tcp_utils.start_server('127.0.0.1', 44412)
+                    if np.array_equal(self.final_place_grasp_pose, np.eye(4)):
+                        print("The placing mode is not success")
+                        no_grasp_pose_rate += 1
+                        self.object_record(self.target_placed_name, no_grasp=True)
+                        self.remove_target_object()
+                        with open(os.path.join(self.parent_directory, 'results/ros_execution_final.txt'), 'a') as f:
+                            f.write(f"Run: {test_index}; target_name: {self.target_placed_name}\n")
+                            f.write(f"no_grasp_pose_in_placing_checker: {no_grasp_pose_rate}/{test_index}; rate: {no_grasp_pose_rate/test_index}\n")
+                            f.write(f"grasp_fail_rate: {self.grasp_fail_rate}/{test_index}; rate: {self.grasp_fail_rate/test_index}\n")
+                            f.write(f"place_success_count: {success_rate}/{test_index}; rate: {success_rate/test_index}\n")
+                            # f.write(f"place_success_except_no_grasp: {success_rate}/{i-no_grasp_pose_rate}\n")    
+                            f.write("=====================================================\n")
+                        continue
+                    self.tranfrom_place_to_grasp()
+                    self.env._panda.reset()
+                    self.execute_robot_motion()
+                    success = self.final_reward(closest_target_index)
+                    if success:
+                        success_rate += 1
+                    self.object_record(self.target_placed_name, success_bool=success)
+                    self.remove_target_object()
+                    
+
+                    # save in the txt file
+                    with open(os.path.join(self.parent_directory, 'results/ros_execution_final.txt'), 'a') as f:
+                        f.write(f"Run: {test_index}; target_name: {self.target_placed_name}\n")
+                        f.write(f"no_grasp_pose_in_placing_checker: {no_grasp_pose_rate}/{test_index}; rate: {no_grasp_pose_rate/test_index}\n")
+                        f.write(f"grasp_fail_rate: {self.grasp_fail_rate}/{test_index}; rate: {self.grasp_fail_rate/test_index}\n")
+                        f.write(f"place_success_count: {success_rate}/{test_index}; rate: {success_rate/test_index}\n")
+                        # f.write(f"place_success_except_no_grasp: {success_rate}/{i-no_grasp_pose_rate}; rate: {success_rate/(i-no_grasp_pose_rate)}\n")    
+                        f.write("=====================================================\n")
+
+            with open(os.path.join(self.parent_directory, 'results/ros_execution_final.txt'), 'a') as f:
+                f.write(f"=======total_success_rate: {success_rate}/{test_index}; rate: {success_rate/test_index}=======\n")
+                f.write(f"place_success_except_no_grasp: {success_rate}/{test_index-no_grasp_pose_rate}; rate: {success_rate/(test_index-no_grasp_pose_rate)}\n")    
+                f.write("=====================================================\n")
 
 if __name__ == '__main__':
     rospy.init_node('robot_grasp_node', anonymous=True)

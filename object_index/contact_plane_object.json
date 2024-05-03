@@ -12,5 +12,5 @@
  "BBQSauce_1.0": ["BBQSauce_1.0.json"],
  "Milk_1.0": ["Milk_1.0.json"],
  "Mustard_1.0": ["Mustard_1.0.json"],
- "test_dataset": ["BBQSauce_1.0.json", "Milk_1.0.json", "Mustard_1.0.json", "005_tomato_soup_can_1.0.json"]
+ "test_dataset": ["BBQSauce_1.0.json", "Milk_1.0.json", "Mustard_1.0.json", "005_tomato_soup_can_1.0.json", "025_mug_1.0.json"]
 }

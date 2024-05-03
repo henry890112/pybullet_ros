@@ -910,18 +910,28 @@ def create_point_cloud_and_camera(rgb, depth, mask, K, camera_transform=np.eye(4
     return type: o3d.geometry.PointCloud
     '''
     pc_full, pc_segments, pc_colors = extract_point_clouds(depth=depth, K=K, segmap=mask, rgb=rgb, z_range=[0.2, 0.6])
-
+    # print(pc_segments)
+    # print(pc_segments[1])
+    # print(pc_segments[1].shape) 
     pc_full_pcd = o3d.geometry.PointCloud()
     pc_full_pcd.points = o3d.utility.Vector3dVector(pc_full)
     pc_full_pcd.colors = o3d.utility.Vector3dVector(pc_colors)
-
-    pc_segments_pcd = o3d.geometry.PointCloud()
-    pc_segments_pcd.points = o3d.utility.Vector3dVector(pc_segments[1])
-    pc_segments_pcd.colors = o3d.utility.Vector3dVector(pc_colors)
-    
-    
     pc_full_pcd.transform(camera_transform)
-    pc_segments_pcd.transform(camera_transform)
+
+
+    if pc_segments != {}:
+        pc_segments_pcd = o3d.geometry.PointCloud()
+        pc_segments_pcd.points = o3d.utility.Vector3dVector(pc_segments[1])
+        pc_segments_pcd.colors = o3d.utility.Vector3dVector(pc_colors)
+        pc_segments_pcd.transform(camera_transform)
+    else:
+        # build 一個空的pc_segments_pcd
+        pc_segments_pcd = o3d.geometry.PointCloud()
+        pc_segments_pcd.points = o3d.utility.Vector3dVector(np.zeros((1,3)))
+        pc_segments_pcd.colors = o3d.utility.Vector3dVector(np.zeros((1,3)))
+    
+    
+    
     if color is not None:
         pc_full_pcd.paint_uniform_color(color)
         pc_segments_pcd.paint_uniform_color(color)

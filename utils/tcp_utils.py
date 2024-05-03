@@ -8,6 +8,7 @@ def send_matrix(host, port, matrix):
         s.connect((host, port))
         matrix_str = str(matrix.tolist())  # 將矩陣轉換為字串
         s.sendall(matrix_str.encode())
+            
 
 # TCP 接收 (接收端必須先啟動等待連線並傳送)
 def receive_matrix(connection):
@@ -19,7 +20,7 @@ def start_server(host, port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((host, port))
         s.listen()
-        print("伺服器啟動，等待連接並接收...")
+        print(f"服務端正在監聽 {host}:{port}...")
         conn, addr = s.accept()
         with conn:
             print(f"來自 {addr} 的連接已建立")
@@ -32,7 +33,7 @@ def start_server_checker(host, port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
         server_socket.bind((host, port))
         server_socket.listen(1)
-        print(f"服務端啟動，等待連接於 {host}:{port}...")
+        print(f"服務端正在監聽 {host}:{port}...")
 
         conn, addr = server_socket.accept()
         with conn:
@@ -80,3 +81,4 @@ def send_target_name(host, port, message):
         client_socket.connect((host, port))
         client_socket.sendall(message.encode())  # 直接傳送字串
         print(f"已向服務端發送：{message}")
+        client_socket.close()

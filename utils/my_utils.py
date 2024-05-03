@@ -35,12 +35,21 @@ class PointCloudPoseEstimator:
         self.pc_segments_noise = np.load(self.noise_pc_file_path, allow_pickle=True)
 
     def get_oriented_bounding_box(self):
-        self.pc_segments_noise_pcd = o3d.geometry.PointCloud()
-        self.pc_segments_noise_pcd.points = o3d.utility.Vector3dVector(self.pc_segments_noise)
-        self.pc_segments_noise_pcd.paint_uniform_color([0.0, 0.0, 0.0])
-        self.pc_segments_noise_pcd.estimate_normals()
-        obb = self.pc_segments_noise_pcd.get_oriented_bounding_box()
-        obb.color = (1, 0, 0) 
+        if self.gt:
+            self.pc_segments_pcd = o3d.geometry.PointCloud()
+            self.pc_segments_pcd.points = o3d.utility.Vector3dVector(self.pc_segments)
+            self.pc_segments_pcd.paint_uniform_color([0.0, 0.0, 0.0])
+            self.pc_segments_pcd.estimate_normals()
+            obb = self.pc_segments_pcd.get_oriented_bounding_box()
+            obb.color = (1, 0, 0) 
+            return obb
+        else:
+            self.pc_segments_noise_pcd = o3d.geometry.PointCloud()
+            self.pc_segments_noise_pcd.points = o3d.utility.Vector3dVector(self.pc_segments_noise)
+            self.pc_segments_noise_pcd.paint_uniform_color([0.0, 0.0, 0.0])
+            self.pc_segments_noise_pcd.estimate_normals()
+            obb = self.pc_segments_noise_pcd.get_oriented_bounding_box()
+            obb.color = (1, 0, 0) 
         return obb
 
     def get_normal_translation(self):
