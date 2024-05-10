@@ -1043,8 +1043,8 @@ class SimulatedYCBEnv():
             self.placed_objects[self.target_idx] = True
             self.target_name = urdfList[0].split('/')[-2]
 
-            # x_rot = 0  # let the object fall from this rotation
-            # y_rot = np.pi*0.75# 135 degree
+            # x_rot = np.pi*0.5  # let the object fall from this rotation
+            # y_rot = 0# 135 degree
             # z_rot = 0
                         
             # zyx照順序轉

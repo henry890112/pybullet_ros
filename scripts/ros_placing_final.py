@@ -35,7 +35,7 @@ class PlacingNode:
         rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=30)
         self.execute = rospy.get_param('~execute', False)
         self.visual_simulation = rospy.get_param('~visual_simulation', False)
-        self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', True)
+        self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', False)
         self.target_place_name = None
         self.path_length = 20
 
@@ -121,6 +121,7 @@ class PlacingNode:
         with open(file) as f:
             file_dir = json.load(f)
         file_dir = file_dir[self.target_place_name]
+        # file_dir = file_dir['025_mug_1.0']
         file_dir = [f[:-5] for f in file_dir]
         test_file_dir = list(set(file_dir))
         self.env = SimulatedYCBEnv()
