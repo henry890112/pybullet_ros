@@ -32,6 +32,8 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   GraspPose.msg
+  motion_planning.msg
+  Robotiq2FGripper_robot_output.msg
 )
 
 add_service_files(

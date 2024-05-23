@@ -334,7 +334,7 @@ class PlacingNode:
                 # print(f"Grasp pose {i}：Rotate 180 degree")
                 self.new_pred_grasps_cam_place[i] = np.dot(self.grasp_pose, rotZ(np.pi))
 
-    def refine_grasp_place_pose_base(self):
+    def refine_grasp_place_pose_base(self, scores):
         '''
         將best_grasp_pose的y軸和[1, 0, 0]做內積, 若<0則代表要旋轉180度
         僅遍歷 grasp_index 中包含的索引, 且grasp index依照分數高低排好
@@ -342,7 +342,10 @@ class PlacingNode:
         self.grasp_index = np.array(self.grasp_index)
         if len(self.grasp_index) == 0:
             return
-        self.grasp_index = self.grasp_index[np.argsort(-self.scores[self.grasp_index])]
+        scores_array = np.array(scores)
+
+        self.grasp_index = self.grasp_index[np.argsort(-scores_array[self.grasp_index])]
+
         print("grasp_index = ", self.grasp_index)
         for i in self.grasp_index:
             self.grasp_pose = self.grasp_list[i]
@@ -366,7 +369,7 @@ class PlacingNode:
         plan = self.expert_plan(pack_pose(pose), world=True, visual=False)
         # checker true代表對的plan及pose
         plan_checker = self.execute_motion_plan_base(plan, gripper_set="open", mode=mode)
-        checker = check_pose_difference(self.env._get_ef_pose(mat=True), pose, tolerance=0.04)
+        checker = check_pose_difference(self.env._get_ef_pose(mat=True), pose, tolerance=0.05)
         return plan_checker, checker
     
     def execute_placing_checker(self, execute=False):
@@ -412,7 +415,7 @@ class PlacingNode:
                 continue
 
             # 第二次執行計劃並檢查
-            mid_retract_pose = transZ(-0.1)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.7)@ transX(0.2)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
             plan_checker, checker = self.execute_plan_with_check(mid_retract_pose, execute)
             print("=====================================================")
             if self.visual_simulation:
@@ -599,7 +602,7 @@ class PlacingNode:
         # stage2
         cabinet_pose_world_stage2[0, 3] += -0.3
         cabinet_pose_world_stage2[1, 3] += 0.
-        cabinet_pose_world_stage2[2, 3] += 0.4
+        cabinet_pose_world_stage2[2, 3] += 0.6
         # chose the cabinet pose
         if self.placing_stage == 1:
             self.cabinet_pose_world = cabinet_pose_world_stage1
@@ -609,7 +612,6 @@ class PlacingNode:
         z_translation = 0
         y_translation = -0.
         x_translation = 0.
-        print('z_translation = {}'.format(z_translation))
         self.place_pose_world = self.cabinet_pose_world.copy()
         self.place_pose_world[:3, 3] += np.array([x_translation, y_translation, z_translation])
         if self.vis_draw_coordinate:

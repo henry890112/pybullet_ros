@@ -19,7 +19,7 @@ import itertools
 from tf.transformations import quaternion_matrix
 from cv_bridge import CvBridge
 from pybullet_ros.srv import GraspGroup, GraspGroupRequest
-from pybullet_ros.msg import GraspPose, motion_planning, Robotiq2FGripper_robot_output
+from pybullet_ros.msg import Robotiq2FGripper_robot_output
 from sensor_msgs.point_cloud2 import create_cloud_xyz32
 from sensor_msgs import point_cloud2
 from geometry_msgs.msg import Pose, TransformStamped
@@ -49,7 +49,8 @@ class ros_node(object):
         self.home_joint_point = [0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]
         self.second_multi_view = [0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]
         self.third_multi_view = [0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]
-        self.mid_retract_pose = transZ(-0.1)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)             
+        self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.7)@ transX(0.2)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+        self.envir_joint = [1.6208316641972509-np.pi/2, -0.98, 1.46939, -0.119555, 1.63676, -0.05]
         rospy.loginfo("Init finished")
 
 
@@ -103,10 +104,11 @@ class ros_node(object):
         self.multiview_pc_target = self.pc_base2cam(self.multiview_pc_target_base)
 
         # Visualize the concatenated pointclouds
-        self.visual_pc(self.multiview_pc_obs_base)
-        self.visual_pc(self.multiview_pc_target_base)
+        # self.visual_pc(self.multiview_pc_obs_base)
+        # self.visual_pc(self.multiview_pc_target_base)
+        # self.visual_pc(self.multiview_pc_obs)
+        # self.visual_pc(self.multiview_pc_target)
         
-
         # save the pointclouds as npy file
         np.save("multiview_pc_obs.npy", self.multiview_pc_obs_base)
         np.save("multiview_pc_target.npy", self.multiview_pc_target_base)
@@ -126,17 +128,15 @@ class ros_node(object):
             print(f"finish grasping")
 
             # Pybullet setup
-            self.actor.init_joint_pose = self.joint_states
             self.actor.load_environment()
-            self.actor.env._panda.reset(self.actor.init_joint_pose)
+            self.actor.env._panda.reset(self.home_joint_point+[0, 0, 0])
             self.actor.initial()
             self.actor.grasp_checker = ValidGraspChecker(self.actor.env)
-
-
 
             # multi-view data
             self.get_multiview_data()
             print(f"self.obs_points: {self.obs_points}")
+            print("***********Finish get multiview data*************\n")
 
             # step 1: get the stable plane (6d pose) on target object
             '''
@@ -149,15 +149,24 @@ class ros_node(object):
             target_pose_base[:3, 3] = target_center[:3]
 
             # get the place pose (can change to other place pose)
-            place_pose_base = self.actor.get_the_target_on_cabinet_pose()
-            place_pose_base[2, 3] += target_center[2]
-            
+            # place_pose_base = self.actor.get_the_target_on_cabinet_pose()
+            # get it from apriltag_inform.py
+            place_pose_base = np.array([[-0.99914546, 0.03692962,  0.0185621,   0.87198179],
+                                        [-0.03680726, -0.99929862,  0.00689135,  0.04792305],
+                                        [ 0.01880358,  0.00620224,  0.99980396,  0.39797172],
+                                        [ 0. ,         0. ,         0.,          1.        ]]
+                                        )
+            place_pose_base[1, 3] += 0.1
+            place_pose_base[2, 3] += target_center[2] + 0.1
+            print('z_translation = {}'.format(target_center[2]))
+            print("***********Finish get target pose*************\n")
+
             # step 2: get the contact grasp
             '''
             # 要放camrea frame的點雲來去生成contact grasp
             # grasp_poses_camera = self.setting_contact_req(obstacle_points=self.obs_points, target_points=self.target_points)
             '''
-            grasp_poses_camera = self.setting_contact_req(obstacle_points=self.multiview_pc_obs, target_points=self.multiview_pc_target)
+            grasp_poses_camera = self.setting_contact_req(obstacle_points=self.obs_points, target_points=self.target_points)
 
             # self.visual_pc(obs_points_base)
             
@@ -168,12 +177,12 @@ class ros_node(object):
                 grasp_world = self.pose_cam2base(grasp_camera.reshape(4,4))
                 self.grasp_list.append(grasp_world)
                 self.score_list.append(grasp_pose_cam.score)
-
             self.visualize_points_grasppose(self.multiview_pc_obs_base, self.grasp_list)
 
             if len(self.grasp_list) == 0:
                 print("No valid grasp found")
                 return
+            print("***********Finish generating grasp poses*************\n")
             
             # step 3: transform the grasp pose to the place pose
             self.grasp_place_list = []
@@ -182,11 +191,11 @@ class ros_node(object):
                 self.grasp_place_list.append(place_pose_base@ relative_grasp_transform)
 
             # adjust the raw grasp pose to pre-grasp pose
-            grasp_place_list = self.grasp2pre_grasp(self.grasp_place_list, drawback_dis=0.1)
-
+            grasp_place_list = self.grasp2pre_grasp(self.grasp_place_list, drawback_dis=0.05)
+            
             # step 4: grasp pose filter
             self.actor.grasp_pose_checker_base(grasp_place_list)
-            self.actor.refine_grasp_place_pose_base()
+            self.actor.refine_grasp_place_pose_base(self.score_list)
             succuss_result = self.actor.execute_placing_checker_base(place_pose_base, target_pose_base, self.mid_retract_pose)
             # 判断结果是否为单位矩阵
             if isinstance(succuss_result, np.ndarray) and np.array_equal(succuss_result, np.eye(4)):
@@ -200,6 +209,8 @@ class ros_node(object):
                 print(f"success_joint_mid_list: {success_joint_mid_list}\n")
                 print(f"success_joint_place_list: {success_joint_place_list}\n")
 
+            print("***********Finish grasp poses filtered*************\n")
+
             # step 5: move to the grasp pose
             self.move_along_path(success_joint_grasp_list)
             ef_pose = self.get_ef_pose()
@@ -211,29 +222,31 @@ class ros_node(object):
             self.set_pose(final_grasp_pose[0], final_grasp_pose[1])
 
             # Close gripper
+            time.sleep(2)
             self.control_gripper("set_pose", 0.)
-            time.sleep(1)
-            print(f"finish grasping")
+            time.sleep(2)
+            print(f"***********Finish robot grasping***********\n")
 
             # step 6: move to the place pose
             self.move_along_path(success_joint_mid_list)
             self.move_along_path(success_joint_place_list)
             ef_pose = self.get_ef_pose()
             forward_mat = np.eye(4)
-            forward_mat[2, 3] = -0.07
+            forward_mat[2, 3] = -0.2
             ef_pose = forward_mat.dot(ef_pose)
             quat_pose = pack_pose(ef_pose)
             final_place_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
             self.set_pose(final_place_pose[0], final_place_pose[1])
-
+            time.sleep(3)
             # Open gripper
             self.control_gripper("set_pose", 0.085)
-            print(f"finish placing")
+            print(f"***********Finish robot placing***********\n")
+            time.sleep(3)
 
-            # step 7: move back 10cm
+            # step 7: move back 5cm
             ef_pose = self.get_ef_pose()
             forward_mat = np.eye(4)
-            forward_mat[2, 3] -= 0.1
+            forward_mat[2, 3] -= 0.05
             ef_pose = ef_pose.dot(forward_mat)
             quat_pose = pack_pose(ef_pose)
             final_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
@@ -241,7 +254,7 @@ class ros_node(object):
 
             # step 8: move back to the home joint
             self.move_along_path([self.home_joint_point])
-            print("Finish the placing task")
+            print("***********Finish the placing task***********\n")
         
         elif msg.data == 1:
             print(f"ruckig joint testing")
@@ -274,14 +287,6 @@ class ros_node(object):
             print(f"finish grasping")
 
         elif msg.data == 3:
-            # Pybullet setup
-            self.actor.init_joint_pose = self.joint_states
-            self.actor.env._panda.reset(self.actor.init_joint_pose)
-            if self.actor.sim_furniture_id is not None:
-                self.actor.remove_sim_fureniture()
-                self.actor.sim_furniture_id = None
-            self.actor.replace_real_furniture()
-            
 
             # Reset the gripper
             self.control_gripper("reset")
@@ -295,20 +300,17 @@ class ros_node(object):
             # Reset the arm's position
             self.move_along_path([self.home_joint_point])
 
-
             # Set init_value to None
             self.target_points = None
             self.obs_points = None
-            
-            
-
+        
             # Segmentation part
             seg_msg = Int32()
             seg_msg.data = 2
             self.seg_pub.publish(seg_msg)    
-            
 
-
+        elif msg.data == 4:
+            self.move_along_path([self.envir_joint])
 
     def points_callback(self, msg):
         self.target_points = self.pc2_tranfer(msg)
@@ -344,6 +346,29 @@ class ros_node(object):
             o3d_pc.crop(self.bounding_box)
         return np.asarray(o3d_pc.points)
 
+    def pc_base2cam(self, pc, crop=True):
+        # 获取从基座坐标系到相机坐标系的变换
+        transform_stamped = self.tf_buffer.lookup_transform('camera_color_optical_frame', 'base', rospy.Time(0))
+        trans = np.array([transform_stamped.transform.translation.x,
+                        transform_stamped.transform.translation.y,
+                        transform_stamped.transform.translation.z])
+        quat = np.array([transform_stamped.transform.rotation.x,
+                        transform_stamped.transform.rotation.y,
+                        transform_stamped.transform.rotation.z,
+                        transform_stamped.transform.rotation.w])
+        T = quaternion_matrix(quat)
+        T[:3, 3] = trans
+        
+        # 反转变换矩阵，从基座坐标系到相机坐标系
+        T_inv = np.linalg.inv(T)
+        
+        # 创建点云对象并应用变换
+        o3d_pc = o3d.geometry.PointCloud()
+        o3d_pc.points = o3d.utility.Vector3dVector(pc)
+        o3d_pc.transform(T_inv)
+            
+        return np.asarray(o3d_pc.points)
+
 
     def pose_cam2base(self, poses):
         transform_stamped = self.tf_buffer.lookup_transform('base', 'camera_color_optical_frame', rospy.Time(0))
@@ -366,6 +391,28 @@ class ros_node(object):
         axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
         o3d.visualization.draw_geometries([o3d_pc, axes])
 
+    def create_grasp_geometry(self, grasp_pose, color=[0, 0, 0], length=0.08, width=0.08):
+        """Create a geometry representing a grasp pose as a U shape."""
+        # Define the grasp frame
+        frame = grasp_pose.reshape(4, 4)
+        # Define the U shape as a line set
+        line_set = o3d.geometry.LineSet()
+        line_set.points = o3d.utility.Vector3dVector([
+            [0, 0, 0],
+            [width/2, 0, 0],
+            [-width/2, 0, 0],
+            [width/2, 0, length/2],
+            [-width/2, 0, length/2],
+            [0, 0, -length/2]
+        ])
+        line_set.lines = o3d.utility.Vector2iVector([
+            [0, 1], [0, 2], [1, 3], [2, 4], [0, 5]
+        ])
+        line_set.colors = o3d.utility.Vector3dVector([color for _ in range(len(line_set.lines))])
+        line_set.transform(frame)
+
+        return line_set
+    
     def visualize_points_grasppose(self, scene_points, grasp_list=None, repre_idx=None):
         
         if grasp_list is None:

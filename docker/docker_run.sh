@@ -52,7 +52,7 @@ docker run \
     -v "/tmp/.X11-unix:/tmp/.X11-unix" \
     -v "/etc/localtime:/etc/localtime:ro" \
     --user "root:root" \
-    --name henry_pybullet \
+    --name henry_pybullet_module \
     --network host \
     --privileged \
     --security-opt seccomp=unconfined \

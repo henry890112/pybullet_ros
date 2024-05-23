@@ -1,0 +1,3 @@
+<launch>
+    <node name="placing_node" pkg="pybullet_ros" type="henry_realworld.py" output="screen"/>
+</launch>
