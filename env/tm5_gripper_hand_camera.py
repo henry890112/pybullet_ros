@@ -114,7 +114,8 @@ class TM5:
         p.resetBasePositionAndOrientation(self.pandaUid, self._base_position,
                                           [0.000000, 0.000000, 0.000000, 1.000000])
         if joints is None:
-            self.target_pos = [0.2, -1, 2, 0, 1.571, 0.0, 0.0, 0.0, 0.0]
+            #Henry change the init joint of the robot
+            self.target_pos = [0.2-np.pi/2, -1, 2, 0, 1.571, 0.0, 0.0, 0.0, 0.0]
             # self.target_pos = [0.2, -1.25, 2.48, -0.4, 1.571, 0.0, 0., 0., 0.]
 
             self.target_pos = self.standardize(self.target_pos)

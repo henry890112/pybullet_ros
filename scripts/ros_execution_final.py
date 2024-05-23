@@ -34,11 +34,12 @@ class ExecutionNode:
         self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
         rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=30)
         self.execute = rospy.get_param('~execute', False)
-        self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', False)
+        self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', True)
         self.test_num = rospy.get_param('~test_num', 100)
         self.object_record_init()
         self.placed_obj = None
         self.path_length = 20
+        self.vis_pcd = False
 
 
 
@@ -79,7 +80,7 @@ class ExecutionNode:
         '''
         # stage2 是最上面的貨價
         self.placing_stage = 2
-        self.num_object = 1
+        self.num_object = 2
         # self.single_release =True
         # self.if_stack = True
         self.single_release =True
@@ -92,29 +93,38 @@ class ExecutionNode:
         rospy.wait_for_service('contact_graspnet/get_grasp_result')
 
         ### 將open3d下的點雲轉到world座標
-        self.world_frame_pose = np.array([[ 1.,    0.,    0.,   -0.05],
+        # self.world_frame_pose = np.array([[ 1.,    0.,    0.,   -0.05],
+        #                             [ 0.,    1.,    0.,    0.  ],
+        #                             [ 0.,    0.,    1.,   -0.65],
+        #                             [ 0.,    0.,    0.,    1.  ]])
+        self.world_frame_pose = np.array([[ 1.,    0.,    0.,   -0.0],
                                     [ 0.,    1.,    0.,    0.  ],
-                                    [ 0.,    0.,    1.,   -0.65],
+                                    [ 0.,    0.,    1.,   -0.],
                                     [ 0.,    0.,    0.,    1.  ]])
 
-        self.init_ef_mat = np.array([[-1.98785608e-01,  7.23231525e-01,  6.61377686e-01,  1.06898375e-01],
+        self.init_ef_mat = np.array([[-1.98785608e-01,  7.23231525e-01,  6.61377686e-01,  1.56898375e-01],
                                 [9.80042993e-01,  1.46612626e-01,  1.34240345e-01, -9.29623842e-02],
-                                [1.20530092e-04,  6.74863616e-01, -7.37942468e-01, -0.3],
+                                [1.20530092e-04,  6.74863616e-01, -7.37942468e-01, 0.35],
                                 [0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  1.00000000e+00]])
-
-        self.left_view_ef_mat = np.array([[ 0.98757027,  0.02243495,  0.15556875,  0.45691898],
+        
+        self.left_view_ef_mat = np.array([[ 0.98757027,  0.02243495,  0.15556875,  0.50691898],
                                     [ 0.14573556, -0.501431,   -0.85283533,  0.36891946],
-                                    [ 0.05887368,  0.86490672, -0.49846791, -0.3],
+                                    [ 0.05887368,  0.86490672, -0.49846791, 0.35],
                                     [ 0.,          0.,          0.,          1.]])
 
-        self.right_view_ef_mat = np.array([[ 0.98691477, -0.16087768,  0.010845,    0.46446365],
+        self.right_view_ef_mat = np.array([[ 0.98691477, -0.16087768,  0.010845,    0.51446365],
                                     [-0.10023915, -0.55945926,  0.82277424, -0.28816143],
-                                    [-0.12629867, -0.81309514, -0.56826485, -0.3],
+                                    [-0.12629867, -0.81309514, -0.56826485, 0.35],
                                     [ 0.,          0.,          0.,          1.]])
 
         self.intrinsic_matrix = np.array([[320, 0, 320],
                                     [0, 320, 320],
                                     [0, 0, 1]])
+        
+        # rotate the matrix -90 degree around z axis
+        self.init_ef_mat = rotZ(-np.pi/2).dot(self.init_ef_mat)
+        self.left_view_ef_mat = rotZ(-np.pi/2).dot(self.left_view_ef_mat)
+        self.right_view_ef_mat = rotZ(-np.pi/2).dot(self.right_view_ef_mat)
 
         self.cam_offset = np.eye(4)
         # 先轉到pybullet座標後再往上移動0.13變相機座標
@@ -297,7 +307,6 @@ class ExecutionNode:
             # 使用目標物體對應的深度資訊中的最小值來計算目標深度
             target_depth = np.min(target_segments[:, 2])
             print(f"target_closet_depth: {target_depth}")
-            
             # 如果這個目標物體比之前記錄的更接近相機，更新最小深度和索引
             if target_depth < min_depth:
                 min_depth = target_depth
@@ -308,7 +317,8 @@ class ExecutionNode:
         print("最接近相機的目標物體索引是：", closest_target_index)
         return closest_target_index, target_object
 
-    def get_multiview_pcd(self, target_object, vis_pcd=False):
+    def get_multiview_pcd(self, target_object):
+
         for multiview_index in range(3):
             rgb, depth, mask = self.rgb_list[target_object][multiview_index], self.depth_list[target_object][multiview_index], self.mask_list[target_object][multiview_index]
             
@@ -333,9 +343,11 @@ class ExecutionNode:
 
         camera = [*camera0, *camera1, *camera2]
 
-        if vis_pcd:
-            o3d.visualization.draw_geometries_with_animation_callback([*camera, robot_base, pc_segments_pcd_0, pc_segments_pcd_1, pc_segments_pcd_2], rotate_view)
-            o3d.visualization.draw_geometries_with_animation_callback([*camera, robot_base, pc_full_pcd_0, pc_full_pcd_1, pc_full_pcd_2], rotate_view)
+        if self.vis_pcd:
+            # o3d.visualization.draw_geometries_with_animation_callback([*camera, robot_base, pc_segments_pcd_0, pc_segments_pcd_1, pc_segments_pcd_2], rotate_view)
+            # o3d.visualization.draw_geometries_with_animation_callback([*camera, robot_base, pc_full_pcd_0, pc_full_pcd_1, pc_full_pcd_2], rotate_view)
+            o3d.visualization.draw_geometries([*camera, robot_base, pc_segments_pcd_0, pc_segments_pcd_1, pc_segments_pcd_2])
+            o3d.visualization.draw_geometries([*camera, robot_base, pc_full_pcd_0, pc_full_pcd_1, pc_full_pcd_2])
 
         #  
         pc_segments_combine_pcd = get_combine_pcd(pc_segments_pcd_0, pc_segments_pcd_1, pc_segments_pcd_2)
@@ -361,7 +373,7 @@ class ExecutionNode:
         pc_full_combine_noise_pcd.points = o3d.utility.Vector3dVector(self.pc_full_combine_noise)
         pc_full_combine_noise_pcd.colors = o3d.utility.Vector3dVector(pc_full_combine_pcd.colors)
         pc_full_combine_noise_pcd.transform(np.linalg.inv(self.origin_camera2world))
-        if vis_pcd:
+        if self.vis_pcd:
             o3d.visualization.draw_geometries([pc_full_combine_noise_pcd, robot_base, *camera])
         self.pc_segments_path = os.path.join(self.parent_directory, 'multiview_data/pc_segments_combine.npy')
         self.pc_segments_noise_path = os.path.join(self.parent_directory, 'multiview_data/pc_segments_combine_noise.npy')
@@ -441,15 +453,27 @@ class ExecutionNode:
         cabinet_pose_world_stage1 = self.cabinet_pose_world.copy()
         cabinet_pose_world_stage2 = self.cabinet_pose_world.copy()
 
+        # # stage1 
+        # cabinet_pose_world_stage1[0, 3] += 0.
+        # cabinet_pose_world_stage1[1, 3] += -0.3
+        # cabinet_pose_world_stage1[2, 3] += 0.2
+
+        # # stage2
+        # cabinet_pose_world_stage2[0, 3] += 0.
+        # cabinet_pose_world_stage2[1, 3] += -0.3
+        # cabinet_pose_world_stage2[2, 3] += 0.4
+
         # stage1 
-        cabinet_pose_world_stage1[0, 3] += 0.
-        cabinet_pose_world_stage1[1, 3] += -0.3
+        cabinet_pose_world_stage1[0, 3] += -0.3
+        cabinet_pose_world_stage1[1, 3] += 0.
         cabinet_pose_world_stage1[2, 3] += 0.2
 
         # stage2
-        cabinet_pose_world_stage2[0, 3] += 0.
-        cabinet_pose_world_stage2[1, 3] += -0.3
+        cabinet_pose_world_stage2[0, 3] += -0.3
+        cabinet_pose_world_stage2[1, 3] += 0.
         cabinet_pose_world_stage2[2, 3] += 0.4
+
+        
 
         # chose the cabinet pose
         if self.placing_stage == 1:
@@ -506,9 +530,9 @@ class ExecutionNode:
         # set the poses of the robot
         self.final_grasp_pose_z_bias = adjust_pose_with_bias(self.final_grasp_pose, -0.1, option="ef")
         if self.placing_stage == 1:
-            self.mid_retract_pose = transZ(-0.1)@ transX(0.3)@ transY(0.2)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.55)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
         elif self.placing_stage == 2:
-            self.mid_retract_pose = transZ(-0.1)@ transX(0.3)@ transY(0.2)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.55)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
         self.final_place_pose_z_bias_top = adjust_pose_with_bias(self.final_place_grasp_pose, 0.10, option="world")
         self.final_place_pose_z_bias_placing = adjust_pose_with_bias(self.final_place_grasp_pose, 0.015, option="world")
         self.final_place_pose_z_bias_release = adjust_pose_with_bias(self.final_place_grasp_pose, -0.1, option="ef")

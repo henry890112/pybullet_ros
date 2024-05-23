@@ -35,9 +35,10 @@ class PlacingNode:
         rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=30)
         self.execute = rospy.get_param('~execute', False)
         self.visual_simulation = rospy.get_param('~visual_simulation', False)
-        self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', False)
+        self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', True)
         self.target_place_name = None
         self.path_length = 20
+        self.renders = True
 
     def initial(self):
         
@@ -60,6 +61,10 @@ class PlacingNode:
         self.cabinet_pose_world = None
         self.place_pose_world = None
 
+        'jointpose 相關data'
+        self.success_joint_grasp_list = []
+        self.success_joint_mid_list = []
+        self.success_joint_place_list = []
 
         'ros 傳輸相關 data'
         self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
@@ -79,24 +84,24 @@ class PlacingNode:
 
 
         ### 將open3d下的點雲轉到world座標
-        self.world_frame_pose = np.array([[ 1.,    0.,    0.,   -0.05],
+        self.world_frame_pose = np.array([[ 1.,    0.,    0.,   -0.0],
                                     [ 0.,    1.,    0.,    0.  ],
-                                    [ 0.,    0.,    1.,   -0.65],
+                                    [ 0.,    0.,    1.,   -0.],
                                     [ 0.,    0.,    0.,    1.  ]])
 
-        self.init_ef_mat = np.array([[-1.98785608e-01,  7.23231525e-01,  6.61377686e-01,  1.06898375e-01],
+        self.init_ef_mat = np.array([[-1.98785608e-01,  7.23231525e-01,  6.61377686e-01,  1.56898375e-01],
                                 [9.80042993e-01,  1.46612626e-01,  1.34240345e-01, -9.29623842e-02],
-                                [1.20530092e-04,  6.74863616e-01, -7.37942468e-01, -0.3],
+                                [1.20530092e-04,  6.74863616e-01, -7.37942468e-01, 0.35],
                                 [0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  1.00000000e+00]])
 
-        self.left_view_ef_mat = np.array([[ 0.98757027,  0.02243495,  0.15556875,  0.45691898],
+        self.left_view_ef_mat = np.array([[ 0.98757027,  0.02243495,  0.15556875,  0.50691898],
                                     [ 0.14573556, -0.501431,   -0.85283533,  0.36891946],
-                                    [ 0.05887368,  0.86490672, -0.49846791, -0.3],
+                                    [ 0.05887368,  0.86490672, -0.49846791, 0.35],
                                     [ 0.,          0.,          0.,          1.]])
 
-        self.right_view_ef_mat = np.array([[ 0.98691477, -0.16087768,  0.010845,    0.46446365],
+        self.right_view_ef_mat = np.array([[ 0.98691477, -0.16087768,  0.010845,    0.51446365],
                                     [-0.10023915, -0.55945926,  0.82277424, -0.28816143],
-                                    [-0.12629867, -0.81309514, -0.56826485, -0.3],
+                                    [-0.12629867, -0.81309514, -0.56826485, 0.35],
                                     [ 0.,          0.,          0.,          1.]])
 
         self.intrinsic_matrix = np.array([[320, 0, 320],
@@ -124,7 +129,7 @@ class PlacingNode:
         # file_dir = file_dir['025_mug_1.0']
         file_dir = [f[:-5] for f in file_dir]
         test_file_dir = list(set(file_dir))
-        self.env = SimulatedYCBEnv()
+        self.env = SimulatedYCBEnv(renders=self.renders)
         self.env._load_index_objs(test_file_dir)
         state = self.env.cabinet(save=False, enforce_face_target=True)
 
@@ -165,7 +170,7 @@ class PlacingNode:
         ax.scatter(x, y, z, c=z, cmap='jet', label='Points')
         plt.show()
         
-    def execute_motion_plan(self, plan, execute=False, gripper_set="close", repeat=100):
+    def execute_motion_plan(self, plan, execute=False, gripper_set="close", repeat=100, mode='grasping'):
         """
         Executes a series of movements in a robot environment based on the provided plan.
 
@@ -178,6 +183,8 @@ class PlacingNode:
         '''
         plan中的每一個step都會做碰撞檢查, 如果有碰撞就會停止並回傳flase
         '''
+
+
         for i in range(len(plan)):
             # Set target position using world frame based coordinates
             next_pos = plan[i]
@@ -187,7 +194,7 @@ class PlacingNode:
             else:
                 jointPoses[6] = 0.0
             jointPoses = jointPoses[:7].copy()  # Consider only the first 7 joint positions
-                    
+
             if execute:
                 # Execute the action and obtain the observation
                 obs = self.env.step(jointPoses, config=True, repeat=repeat)[0]
@@ -198,7 +205,21 @@ class PlacingNode:
                 # 在path length中每一步都檢查是否會發生碰撞
                 if(self.env._panda.check_for_collisions() == True):
                     print("Collision detected in the path")
+                    # 有碰撞表示此grasp pose不行, 初始化joint list
+                    if(mode == 'grasping'):
+                        self.success_joint_grasp_list = []
+                    elif(mode == 'placing_mid'):
+                        self.success_joint_mid_list = []
+                    elif(mode == 'placing'):
+                        self.success_joint_place_list = []
                     return False
+                else:
+                    if(mode == 'grasping'):
+                        self.success_joint_grasp_list.append(jointPoses[:6])
+                    elif(mode == 'placing_mid'):
+                        self.success_joint_mid_list.append(jointPoses[:6])
+                    elif(mode == 'placing'):
+                        self.success_joint_place_list.append(jointPoses[:6])
         return True
     
     def check_scene_placing(self):
@@ -268,12 +289,12 @@ class PlacingNode:
                 # print(f"Grasp pose {i}：Rotate 180 degree")
                 self.new_pred_grasps_cam_place[i] = np.dot(self.grasp_pose, rotZ(np.pi))
 
-    def execute_plan_with_check(self, pose, execute=False):
+    def execute_plan_with_check(self, pose, execute=False, mode='grasping'):
         if self.vis_draw_coordinate:
             self.env.draw_ef_coordinate(pose, 1)
         plan = self.expert_plan(pack_pose(pose), world=True, visual=False)
         # checker true代表對的plan及pose
-        plan_checker = self.execute_motion_plan(plan, gripper_set="open")
+        plan_checker = self.execute_motion_plan(plan, gripper_set="open", mode=mode)
         checker = check_pose_difference(self.env._get_ef_pose(mat=True), pose, tolerance=0.04)
         return plan_checker, checker
     
@@ -299,7 +320,7 @@ class PlacingNode:
             
             # 第一次執行計劃並檢查
             pose_z_bias = adjust_pose_with_bias(final_grasp_pose, -0.1)
-            plan_checker, checker = self.execute_plan_with_check(pose_z_bias, execute)
+            plan_checker, checker = self.execute_plan_with_check(pose_z_bias, execute, mode='grasping')
             count += 1
             print(f"第 {count} / {len(self.grasp_index)} 個夾取姿態。")
             print("=====================================================")
@@ -321,8 +342,8 @@ class PlacingNode:
                 continue
 
             # 第二次執行計劃並檢查
-            mid_retract_pose = transZ(-0.1)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
-            plan_checker, checker = self.execute_plan_with_check(mid_retract_pose, execute)
+            mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.55)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            plan_checker, checker = self.execute_plan_with_check(mid_retract_pose, execute, mode='placing_mid')
             print("=====================================================")
             if self.visual_simulation:
                 time.sleep(0.2)
@@ -342,7 +363,7 @@ class PlacingNode:
                 
             # 第三次執行計劃並檢查
             pose_z_bias = adjust_pose_with_bias(grasp_pose, 0.015)
-            plan_checker, checker = self.execute_plan_with_check(pose_z_bias, execute)
+            plan_checker, checker = self.execute_plan_with_check(pose_z_bias, execute, mode='placing')
             print("=====================================================")
 
             if not plan_checker or not checker:
@@ -372,6 +393,10 @@ class PlacingNode:
                 f.write(f"!!!!!!!!!!!!!!!Time elapsed: {end_time - start_time} seconds!!!!!!!!!!!!!!!!!!!!!!!!\n")
                 f.write("=====================================================\n")
             
+            print("grasp_pose = ", grasp_pose)
+            print("success_joint_grasp_list = ", self.success_joint_grasp_list)
+            print("success_joint_mid_list = ", self.success_joint_mid_list)
+            print("success_joint_place_list = ", self.success_joint_place_list)
             self.grasp_pose_checker(time=5, grasp_poses=np.expand_dims(grasp_pose, axis=0), only_vis_grasp=True)
             return grasp_pose
         # if all grasp pose failed return np.eye(4)

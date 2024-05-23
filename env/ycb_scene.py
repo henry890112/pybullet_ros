@@ -90,9 +90,10 @@ class SimulatedYCBEnv():
         self.init_constant()
         self.connect()
 
+
     def init_constant(self):
         # 原本[0.8, 0.8, 0.8]
-        self._shift = [-0.0, 0., -0.]  # to work without axis in DIRECT mode # traslate to the base position
+        self._shift = [-0.05, 0., -0.65]  # to work without axis in DIRECT mode # traslate to the base position
         self.root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
         self._standoff_dist = 0.08
         self.cam_offset = np.eye(4)
@@ -113,7 +114,7 @@ class SimulatedYCBEnv():
             if (self.cid < 0):
                 self.cid = p.connect(p.GUI)
             # pybullet.resetDebugVisualizerCamera(cameraDistance = 3,cameraYaw = 30,cameraPitch = 52,cameraTargetPosition = [0,0,0])
-            p.resetDebugVisualizerCamera(1.5, 50., -17.4, [-0.08, 0.43, -0.62])
+            p.resetDebugVisualizerCamera(1.3, -34.6, -23.8, [0.27, -0.09, 0.04])
 
 
         else:
@@ -250,26 +251,26 @@ class SimulatedYCBEnv():
         self.obj_path = [plane_file, table_file]
 
         self.plane_id = p.loadURDF(plane_file, [0 - self._shift[0], 0 - self._shift[1], -.82 - self._shift[2]])
-        self.table_pos = np.array([0.5 - self._shift[0], 0.0 - self._shift[1], -.82 - self._shift[2]])
-        self.table_id = p.loadURDF(table_file, [self.table_pos[0], self.table_pos[1], self.table_pos[2]],
-                                  [0.707, 0., 0., 0.707])
-        # create the shelf  x-0.5, y+0.5
-        orientation = p.getQuaternionFromEuler([0, 0, np.pi/2])
-        #Henry 20240201 y從0.5改成0.7
-        self.cabinet_pos = np.array([0.1-self._shift[0], 0.9 - self._shift[1], -.82 - self._shift[2]])
-        self.cabinet_id = p.loadURDF(cabinet_file, [self.cabinet_pos[0], self.cabinet_pos[1], self.cabinet_pos[2]],
-                                  [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=True)   # default 0.8
+        # self.table_pos = np.array([0.5 - self._shift[0], 0.0 - self._shift[1], -.82 - self._shift[2]])
+        # self.table_id = p.loadURDF(table_file, [self.table_pos[0], self.table_pos[1], self.table_pos[2]],
+        #                           [0.707, 0., 0., 0.707])
+        # # create the shelf  x-0.5, y+0.5
+        # orientation = p.getQuaternionFromEuler([0, 0, np.pi/2])
+        # #Henry 20240201 y從0.5改成0.7
+        # self.cabinet_pos = np.array([0.1-self._shift[0], 0.9 - self._shift[1], -.82 - self._shift[2]])
+        # self.cabinet_id = p.loadURDF(cabinet_file, [self.cabinet_pos[0], self.cabinet_pos[1], self.cabinet_pos[2]],
+        #                           [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=True)   # default 0.8
 
-        # orientation = p.getQuaternionFromEuler([0, 0, np.pi/8])
-        # self.place_object_pos = np.array([ -0.2-self._shift[0], 0.5 - self._shift[1], -.5 - self._shift[2]])
-        # # self.place_object_1 = p.loadURDF(place_object_file1, [self.place_object_pos[0], self.place_object_pos[1], self.place_object_pos[2]],
-        # #                           [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=False, globalScaling=1.) 
-        # self.place_object_2 = p.loadURDF(place_object_file2, [self.place_object_pos[0] + 0.2, self.place_object_pos[1], self.place_object_pos[2]],
-        #                             [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=False, globalScaling=1.)
-        # orientation = p.getQuaternionFromEuler([0, 0, 0])
-        # self.place_object_3 = p.loadURDF(place_object_file3, [self.place_object_pos[0] + 0.4, self.place_object_pos[1], self.place_object_pos[2]],
-        #                             [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=False, globalScaling=1.)
         
+        # create the shelf  x-0.5, y+0.5
+        orientation = p.getQuaternionFromEuler([0, 0, 0])
+        #Henry 20240201 y從0.5改成0.7
+        self.cabinet_pos = np.array([0.9 - self._shift[0], 0.1 - self._shift[1], -.82 - self._shift[2]])
+        self.cabinet_id = p.loadURDF(cabinet_file, [self.cabinet_pos[0], self.cabinet_pos[1], self.cabinet_pos[2]],
+                                  [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=True)
+        self.table_pos = np.array([0.-self._shift[0], -0.5 - self._shift[1], -.82 - self._shift[2]])
+        self.table_id = p.loadURDF(table_file, [self.table_pos[0], self.table_pos[1], self.table_pos[2]],
+                                  [0.707, 0., 0., 0.707], useFixedBase=True)   # default 0.8
 
         # Intialize robot and objects
         if init_joints is None:
@@ -1035,8 +1036,8 @@ class SimulatedYCBEnv():
         if single_release==True:
             print("single_release：", single_release)
             #Henry change the target object on the table (just one object)
-            xpos = 0.5-self._shift[0]
-            ypos = -self._shift[0]
+            xpos = self.table_pos[0]
+            ypos = self.table_pos[1]
             obj_path = '/'.join(urdfList[0].split('/')[:-1]) + '/'
 
             self.target_idx = self.obj_path.index(os.path.join(self.root_dir, obj_path))
