@@ -32,7 +32,7 @@ class PlacingNode:
         self.env = None
         self.planner = GraspPlanner()
         self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
-        # rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=30)
+        rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=30)
         self.execute = rospy.get_param('~execute', False)
         self.visual_simulation = rospy.get_param('~visual_simulation', False)
         self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', False)
@@ -519,6 +519,9 @@ class PlacingNode:
                 elif not checker:
                     count_in_1_checker += 1
                     print("No.1姿態錯誤。")
+                self.success_joint_grasp_list = []
+                self.success_joint_mid_list = []
+                self.success_joint_place_list = []
                 continue
 
             # 第二次執行計劃並檢查
@@ -538,6 +541,9 @@ class PlacingNode:
                 elif not checker:
                     count_in_2_checker += 1
                     print("No.2姿態錯誤。")
+                self.success_joint_grasp_list = []
+                self.success_joint_mid_list = []
+                self.success_joint_place_list = []
                 continue
                 
             # 第三次執行計劃並檢查
@@ -557,6 +563,9 @@ class PlacingNode:
                 elif not checker:
                     count_in_3_checker += 1
                     print("No.3姿態錯誤。")
+                self.success_joint_grasp_list = []
+                self.success_joint_mid_list = []
+                self.success_joint_place_list = []
                 continue
 
             end_time = time.time()
@@ -571,9 +580,9 @@ class PlacingNode:
                 f.write("=====================================================\n")
             
             print("grasp_pose = ", grasp_pose)
-            print("success_joint_grasp_list = ", self.success_joint_grasp_list)
-            print("success_joint_mid_list = ", self.success_joint_mid_list)
-            print("success_joint_place_list = ", self.success_joint_place_list)
+            print("\nsuccess_joint_grasp_list = ", self.success_joint_grasp_list)
+            print("\nsuccess_joint_mid_list = ", self.success_joint_mid_list)
+            print("\nsuccess_joint_place_list = ", self.success_joint_place_list)
             return grasp_pose, self.success_joint_grasp_list, self.success_joint_mid_list, self.success_joint_place_list
         
         # if all grasp pose failed return np.eye(4)

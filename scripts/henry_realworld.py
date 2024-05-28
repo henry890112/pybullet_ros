@@ -41,17 +41,17 @@ class ros_node(object):
         self.obs_points_sub = rospy.Subscriber("/uoais/obs_pc", PointCloud2, self.obs_points_callback)
         self.seg_pub = rospy.Publisher("/uoais/data_init", Int32, queue_size=1)
 
-        # self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
-        # rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=None)
+        self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
+        rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=None)
         self.target_points = None
         self.obs_points = None
-        # self.home_joint_point = [-0.04229641181761173, -1.7921697281949702, 2.502655034341253, -0.5894170708848987, 1.5575706693473996, -0.0387850963381803]
         self.home_joint_point = [[0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]]
         self.second_multi_view = [0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]
         self.third_multi_view = [0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]
         self.left_joint_list = [[-0.7347407781434788, 0.5118680836287178, 1.1827692285964984, 0.4877031591085841, 0.9902222157305788, 2.530426744504708]]
         self.right_joint_list = [[-2.1427776820230466, 0.4583241646482387, 0.7837185076979353, 0.7192889843407846, 2.2248681578861396, 0.8679910446001847]]
 
+        self.vis_pcd = False
 
         self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.7)@ transX(0.2)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
         self.envir_joint = [1.6208316641972509-np.pi/2, -0.98, 1.46939, -0.119555, 1.63676, -0.05]
@@ -98,7 +98,8 @@ class ros_node(object):
                 self.multiview_pc_target_base.append(self.target_points_base)
                 print(self.target_points_base.shape)
 
-            self.visual_pc(self.target_points_base)
+            if self.vis_pcd == True:
+                self.visual_pc(self.target_points_base)
             self.move_along_path(self.home_joint_point)
 
             
@@ -114,8 +115,9 @@ class ros_node(object):
         self.multiview_pc_target = self.pc_base2cam(self.multiview_pc_target_base)
 
         # Visualize the concatenated pointclouds
-        self.visual_pc(self.multiview_pc_obs_base)
-        self.visual_pc(self.multiview_pc_target_base)
+        if self.vis_pcd == True:
+            self.visual_pc(self.multiview_pc_obs_base)
+            self.visual_pc(self.multiview_pc_target_base)
         print(self.multiview_pc_target_base.shape)
         # self.visual_pc(self.multiview_pc_obs)
         # self.visual_pc(self.multiview_pc_target)
@@ -162,9 +164,9 @@ class ros_node(object):
             # get the place pose (can change to other place pose)
             # place_pose_base = self.actor.get_the_target_on_cabinet_pose()
             # get it from apriltag_inform.py
-            place_pose_base = np.array([[-0.99914546, 0.03692962,  0.0185621,   0.87198179],
+            place_pose_base = np.array([[-0.99914546, 0.03692962,  0.0185621,   0.6598179],
                                         [-0.03680726, -0.99929862,  0.00689135,  0.04792305],
-                                        [ 0.01880358,  0.00620224,  0.99980396,  0.39797172],
+                                        [ 0.01880358,  0.00620224,  0.99980396,  0.35],
                                         [ 0. ,         0. ,         0.,          1.        ]]
                                         )
             place_pose_base[1, 3] += 0.1
@@ -188,7 +190,8 @@ class ros_node(object):
                 grasp_world = self.pose_cam2base(grasp_camera.reshape(4,4))
                 self.grasp_list.append(grasp_world)
                 self.score_list.append(grasp_pose_cam.score)
-            self.visualize_points_grasppose(self.multiview_pc_obs_base, self.grasp_list)
+            if self.vis_pcd == True:
+                self.visualize_points_grasppose(self.multiview_pc_obs_base, self.grasp_list)
 
             if len(self.grasp_list) == 0:
                 print("No valid grasp found")
@@ -233,35 +236,36 @@ class ros_node(object):
             self.set_pose(final_grasp_pose[0], final_grasp_pose[1])
 
             # Close gripper
-            time.sleep(2)
+            time.sleep(1)
             self.control_gripper("set_pose", 0.)
-            time.sleep(2)
+            time.sleep(1)
             print(f"***********Finish robot grasping***********\n")
 
             # step 6: move to the place pose
+            # 可以微調place pose!!!!
             self.move_along_path(success_joint_mid_list)
             self.move_along_path(success_joint_place_list)
             ef_pose = self.get_ef_pose()
             forward_mat = np.eye(4)
-            forward_mat[2, 3] = -0.2
+            forward_mat[2, 3] = 0.
             ef_pose = forward_mat.dot(ef_pose)
             quat_pose = pack_pose(ef_pose)
             final_place_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
             self.set_pose(final_place_pose[0], final_place_pose[1])
-            time.sleep(3)
+            time.sleep(2)
             # Open gripper
             self.control_gripper("set_pose", 0.085)
             print(f"***********Finish robot placing***********\n")
-            time.sleep(3)
+            time.sleep(1)
 
-            # step 7: move back 5cm
-            ef_pose = self.get_ef_pose()
-            forward_mat = np.eye(4)
-            forward_mat[2, 3] -= 0.05
-            ef_pose = ef_pose.dot(forward_mat)
-            quat_pose = pack_pose(ef_pose)
-            final_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
-            self.set_pose(final_pose[0], final_pose[1])
+            # # step 7: move back 5cm
+            # ef_pose = self.get_ef_pose()
+            # forward_mat = np.eye(4)
+            # forward_mat[2, 3] -= 0.05
+            # ef_pose = ef_pose.dot(forward_mat)
+            # quat_pose = pack_pose(ef_pose)
+            # final_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
+            # self.set_pose(final_pose[0], final_pose[1])
 
             # step 8: move back to the home joint
             self.move_along_path(self.home_joint_point)
@@ -298,7 +302,6 @@ class ros_node(object):
             print(f"finish grasping")
 
         elif msg.data == 3:
-
             # Reset the gripper
             self.control_gripper("reset")
             time.sleep(1)
@@ -306,7 +309,6 @@ class ros_node(object):
             time.sleep(1)
             self.control_gripper("set_pose", 0.085)
             print(f"finish grasping")
-
 
             # Reset the arm's position
             self.move_along_path(self.home_joint_point)
@@ -329,6 +331,15 @@ class ros_node(object):
             print(f"self.obs_points: {self.obs_points}")
             print("***********Finish get multiview data*************\n")
 
+        elif msg.data == 6:
+            # step 7: move back 5cm
+            ef_pose = self.get_ef_pose()
+            forward_mat = np.eye(4)
+            forward_mat[2, 3] -= 0.03
+            ef_pose = ef_pose.dot(forward_mat)
+            quat_pose = pack_pose(ef_pose)
+            final_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
+            self.set_pose(final_pose[0], final_pose[1])
 
     def points_callback(self, msg):
         self.target_points = self.pc2_tranfer(msg)
