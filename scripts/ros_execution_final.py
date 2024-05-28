@@ -67,6 +67,8 @@ class ExecutionNode:
         self.pc_segments_path = None
         self.pc_segments_noise_path = None
 
+        
+
         '場景設置相關 data'
         '''
         single release: (只在num_object = 1有用) true為以自己設定的角度放在桌上; (多object也可用)false就是pack放在桌上
@@ -80,13 +82,20 @@ class ExecutionNode:
         '''
         # stage2 是最上面的貨價
         self.placing_stage = 2
-        self.num_object = 2
+        self.num_object = 1
         # self.single_release =True
         # self.if_stack = True
         self.single_release =True
         self.if_stack = False
         self.cabinet_pose_world = None
         self.place_pose_world = None
+
+        'jointpose 相關data'
+        self.success_joint_grasp_list = []
+        self.success_joint_mid_list = []
+        self.success_joint_place_list = []
+        self.left_joint_list = []
+        self.right_joint_list = []
 
         'ros 傳輸相關 data'
         self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
@@ -170,6 +179,27 @@ class ExecutionNode:
             planer_path.append(action)
 
         return planer_path
+    
+    def expert_plan_multiview(self, goal_pose, world=False, visual=False):
+        if world:
+            pos, orn = self.env._get_ef_pose()
+            ef_pose_list = [*pos, *orn]
+        else:
+            ef_pose_list = [0, 0, 0, 0, 0, 0, 1]
+        goal_pos = [*goal_pose[:3], *ros_quat(goal_pose[3:])]
+
+        solver = self.planner.plan(ef_pose_list, goal_pos, path_length=5)
+        if visual:
+            self.path_visulization(solver)
+        path = solver.getSolutionPath().getStates()
+        planer_path = []
+        for i in range(len(path)):
+            waypoint = path[i]
+            rot = waypoint.rotation()
+            action = [waypoint.getX(), waypoint.getY(), waypoint.getZ(), rot.w, rot.x, rot.y, rot.z]
+            planer_path.append(action)
+
+        return planer_path
 
     def path_visulization(self, ss):
         fig = plt.figure()
@@ -187,7 +217,7 @@ class ExecutionNode:
         ax.scatter(x, y, z, c=z, cmap='jet', label='Points')
         plt.show()
         
-    def execute_motion_plan(self, env, plan, execute=False, gripper_set="close", repeat=100):
+    def execute_motion_plan(self, plan, execute=False, gripper_set="close", repeat=100, mode='nothing'):
         """
         Executes a series of movements in a robot environment based on the provided plan.
 
@@ -209,18 +239,35 @@ class ExecutionNode:
             else:
                 jointPoses[6] = 0.0
             jointPoses = jointPoses[:7].copy()  # Consider only the first 7 joint positions
-                    
+
             if execute:
                 # Execute the action and obtain the observation
                 obs = self.env.step(jointPoses, config=True, repeat=repeat)[0]
-                # print("JointPoses = ", jointPoses)
+                if(mode == 'left'):
+                        self.left_joint_list.append(jointPoses[:6])
+                elif(mode == 'right'):
+                    self.right_joint_list.append(jointPoses[:6])
             else:
                 # Only reset the robot's joint positions
-                env._panda.reset(joints=jointPoses)
+                self.env._panda.reset(joints=jointPoses)
                 # 在path length中每一步都檢查是否會發生碰撞
                 if(self.env._panda.check_for_collisions() == True):
                     print("Collision detected in the path")
+                    # 有碰撞表示此grasp pose不行, 初始化joint list
+                    if(mode == 'grasping'):
+                        self.success_joint_grasp_list = []
+                    elif(mode == 'placing_mid'):
+                        self.success_joint_mid_list = []
+                    elif(mode == 'placing'):
+                        self.success_joint_place_list = []
                     return False
+                else:
+                    if(mode == 'grasping'):
+                        self.success_joint_grasp_list.append(jointPoses[:6])
+                    elif(mode == 'placing_mid'):
+                        self.success_joint_mid_list.append(jointPoses[:6])
+                    elif(mode == 'placing'):
+                        self.success_joint_place_list.append(jointPoses[:6])
         return True
 
     def check_scene(self):
@@ -253,7 +300,8 @@ class ExecutionNode:
         print("==============self.placed_obj!!!!!!!!!!!!!!!", self.placed_obj)
     
     def get_multiview_data(self):
-        execute = False
+        # multiview use reset or not
+        execute = True
         self.env._panda.reset()
         end_points = [self.init_ef_mat, self.left_view_ef_mat, self.right_view_ef_mat]
         views_dict = {"origin": 0, "left": 1, "right": 2}
@@ -266,13 +314,16 @@ class ExecutionNode:
 
             if self.vis_draw_coordinate:
                 self.env.draw_ef_coordinate(END_POINT, 5)
-            plan = self.expert_plan(pack_pose(END_POINT), world=True, visual=False)
-            self.execute_motion_plan(self.env, plan, execute=execute, gripper_set="open", repeat=200)
+            plan = self.expert_plan_multiview(pack_pose(END_POINT), world=True, visual=False)
+            self.execute_motion_plan(plan, execute=execute, gripper_set="open", repeat=200, mode=view_name)
             checker = check_pose_difference(self.env._get_ef_pose(mat=True), END_POINT, tolerance=0.04)
             print(f"{view_name} checker: {checker}")
             save_observation_images(save_path, self.env, self.placed_obj, multiview_index, visual=False)
             self.env._panda.reset()
-
+        
+        print('==================finish multiview data=====================')
+        print('left_joint_list:', self.left_joint_list)
+        print('right_joint_list:', self.right_joint_list)
 
         for i, index in enumerate(self.placed_obj.keys()):
             placed_name = self.placed_obj[index]

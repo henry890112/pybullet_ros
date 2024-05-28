@@ -14,8 +14,8 @@ then
         --privileged \
         -e DISPLAY=${DISPLAY} \
         -e LINES="$(tput lines)" \
-        henry_pybullet_module \
+        henry_pybullet \
         $BASH_OPTION
 else
-    docker start -i henry_pybullet_module
+    docker start -i henry_pybullet
 fi
