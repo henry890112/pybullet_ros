@@ -41,34 +41,17 @@ class ros_node(object):
         self.obs_points_sub = rospy.Subscriber("/uoais/obs_pc", PointCloud2, self.obs_points_callback)
         self.seg_pub = rospy.Publisher("/uoais/data_init", Int32, queue_size=1)
 
-        self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
+        # self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
         # rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=None)
         self.target_points = None
         self.obs_points = None
         # self.home_joint_point = [-0.04229641181761173, -1.7921697281949702, 2.502655034341253, -0.5894170708848987, 1.5575706693473996, -0.0387850963381803]
-        self.home_joint_point = [0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]
+        self.home_joint_point = [[0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]]
         self.second_multi_view = [0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]
         self.third_multi_view = [0.2-np.pi/2, -1, 2, 0, 1.571, 0.0]
-        self.left_joint_list = [[-1.3707963272857595, -1.0000000004669976, 1.9999999991003996, 7.948592259251724e-10, 1.5709999999913933, -2.7528697118704175e-10], 
-                                [-0.8190295047381287, -1.0499452268783844, 2.047922900117436, 0.10151458154088319, 1.1508079883547988, 0.6174752009139676], 
-                                [-0.6060157514618949, -0.9685336423151772, 2.074297980750753, 0.17980966104904322, 0.9485745593793079, 1.0118414914063096], 
-                                [-0.5709403163667338, -0.809955266644182, 2.085549327649876, 0.16179740202522933, 0.8453378689729599, 1.2632282832643282], 
-                                [-0.5682163159468888, -0.6173086362213861, 2.0540815558039514, 0.16557251187192717, 0.7762004518779632, 1.5086158155010576], 
-                                [-0.5748332677349518, -0.4081945827634077, 1.9740472252605794, 0.22052218136015048, 0.7379796310607901, 1.7676336014831238], 
-                                [-0.5857612613372185, -0.19346548275340195, 1.8476138102485942, 0.3240110733032056, 0.7325654686996395, 2.0326573096928557], 
-                                [-0.5989578623144279, 0.02127624798140754, 1.679734923775405, 0.45949188844104943, 0.7594570552445472, 2.2884595872566185], 
-                                [-0.6133622290802477, 0.2349198716277747, 1.4735556848283953, 0.6105532177118302, 0.8148161216010239, 2.522090682245209], 
-                                [-0.6283185270693223, 0.4513021735385058, 1.2251491793291411, 0.7706955281417986, 0.8929188007190845, 2.728222144593471]]
-        self.right_joint_list = [[-1.3707963272857595, -1.0000000004669976, 1.9999999991003996, 7.948592259251724e-10, 1.5709999999913933, -2.7528697118704175e-10], 
-                                 [-1.6186203948464124, -0.8363924314180742, 1.9995594676659378, -0.019086789345560965, 1.7238402269522741, -0.003475832887604656], 
-                                 [-1.732840676564901, -0.6869914265939931, 1.9765331072637122, 0.0023419136276672395, 1.8023345539388052, 0.08769273537961975], 
-                                 [-1.8066974222438699, -0.5372511887154672, 1.937024866934295, 0.035796615679231925, 1.869169308905204, 0.20498147837812444], 
-                                 [-1.8614050492144476, -0.3868312776020651, 1.8827092070897444, 0.0776198768256194, 1.9386638328986239, 0.3329874825037438], 
-                                 [-1.904898195364292, -0.23744803510801574, 1.8152471875889862, 0.1264484139111821, 2.01564881343539, 0.46615135869405483], 
-                                 [-1.9407942577761965, -0.09095377678153288, 1.7366061267066675, 0.18061696876849542, 2.101754741309402, 0.6025485932843124], 
-                                 [-1.9709162335711148, 0.0511330003521243, 1.6490075198368366, 0.23755913545860208, 2.197240672195552, 0.7423085119449979], 
-                                 [-1.9962255367867476, 0.18765765285533034, 1.5549009265026381, 0.2934170605653129, 2.3016572324256823, 0.8873135853741284], 
-                                 [-2.017232094226749, 0.31767796563948986, 1.4571390570576546, 0.3421950382336292, 2.4140600253746145, 1.0416771016087587]]
+        self.left_joint_list = [[-0.7347407781434788, 0.5118680836287178, 1.1827692285964984, 0.4877031591085841, 0.9902222157305788, 2.530426744504708]]
+        self.right_joint_list = [[-2.1427776820230466, 0.4583241646482387, 0.7837185076979353, 0.7192889843407846, 2.2248681578861396, 0.8679910446001847]]
+
 
         self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.7)@ transX(0.2)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
         self.envir_joint = [1.6208316641972509-np.pi/2, -0.98, 1.46939, -0.119555, 1.63676, -0.05]
@@ -91,7 +74,7 @@ class ros_node(object):
         
         for multiview_joint in angle_list:
             # Reset the arm's position
-            self.move_along_path([multiview_joint])
+            self.move_along_path(multiview_joint)
 
             # Set init_value to None
             self.target_points = None
@@ -101,7 +84,7 @@ class ros_node(object):
             seg_msg = Int32()
             seg_msg.data = 2
             self.seg_pub.publish(seg_msg)    
-            time.sleep(5) # Sleep to wait for the segmentation pointcloud arrive
+            time.sleep(2) # Sleep to wait for the segmentation pointcloud arrive
 
             print(f"self.obs_points: {self.obs_points}")
 
@@ -113,10 +96,10 @@ class ros_node(object):
                 self.multiview_pc_obs_base.append(self.obs_points_base)
             if self.target_points_base is not None:
                 self.multiview_pc_target_base.append(self.target_points_base)
+                print(self.target_points_base.shape)
 
-            joint_reverse_list = multiview_joint[::-1]
-            self.move_along_path([joint_reverse_list])
-            joint_reverse_list = []
+            self.visual_pc(self.target_points_base)
+            self.move_along_path(self.home_joint_point)
 
             
 
@@ -131,16 +114,17 @@ class ros_node(object):
         self.multiview_pc_target = self.pc_base2cam(self.multiview_pc_target_base)
 
         # Visualize the concatenated pointclouds
-        # self.visual_pc(self.multiview_pc_obs_base)
-        # self.visual_pc(self.multiview_pc_target_base)
+        self.visual_pc(self.multiview_pc_obs_base)
+        self.visual_pc(self.multiview_pc_target_base)
+        print(self.multiview_pc_target_base.shape)
         # self.visual_pc(self.multiview_pc_obs)
         # self.visual_pc(self.multiview_pc_target)
         
         # save the pointclouds as npy file
-        np.save("multiview_pc_obs.npy", self.multiview_pc_obs_base)
-        np.save("multiview_pc_target.npy", self.multiview_pc_target_base)
-        np.save("multiview_pc_obs_cam.npy", self.multiview_pc_obs)
-        np.save("multiview_pc_target_cam.npy", self.multiview_pc_target)
+        np.save("/home/user/henry_pybullet_ws/src/pybullet_ros/realworld_data/multiview_pc_obs.npy", self.multiview_pc_obs_base)
+        np.save("/home/user/henry_pybullet_ws/src/pybullet_ros/realworld_data/multiview_pc_target.npy", self.multiview_pc_target_base)
+        np.save("/home/user/henry_pybullet_ws/src/pybullet_ros/realworld_data/multiview_pc_obs_cam.npy", self.multiview_pc_obs)
+        np.save("/home/user/henry_pybullet_ws/src/pybullet_ros/realworld_data/multiview_pc_target_cam.npy", self.multiview_pc_target)
 
 
     def get_env_callback(self, msg):
@@ -156,7 +140,7 @@ class ros_node(object):
 
             # Pybullet setup
             self.actor.load_environment()
-            self.actor.env._panda.reset(self.home_joint_point+[0, 0, 0])
+            self.actor.env._panda.reset(self.home_joint_point[0]+[0, 0, 0])
             self.actor.initial()
             self.actor.grasp_checker = ValidGraspChecker(self.actor.env)
 
@@ -280,7 +264,7 @@ class ros_node(object):
             self.set_pose(final_pose[0], final_pose[1])
 
             # step 8: move back to the home joint
-            self.move_along_path([self.home_joint_point])
+            self.move_along_path(self.home_joint_point)
             print("***********Finish the placing task***********\n")
         
         elif msg.data == 1:
@@ -325,7 +309,7 @@ class ros_node(object):
 
 
             # Reset the arm's position
-            self.move_along_path([self.home_joint_point])
+            self.move_along_path(self.home_joint_point)
 
             # Set init_value to None
             self.target_points = None
@@ -338,6 +322,13 @@ class ros_node(object):
 
         elif msg.data == 4:
             self.move_along_path([self.envir_joint])
+
+        elif msg.data == 5:
+            # multi-view data
+            self.get_multiview_data()
+            print(f"self.obs_points: {self.obs_points}")
+            print("***********Finish get multiview data*************\n")
+
 
     def points_callback(self, msg):
         self.target_points = self.pc2_tranfer(msg)

@@ -32,7 +32,7 @@ class PlacingNode:
         self.env = None
         self.planner = GraspPlanner()
         self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
-        rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=30)
+        # rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=30)
         self.execute = rospy.get_param('~execute', False)
         self.visual_simulation = rospy.get_param('~visual_simulation', False)
         self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', False)
