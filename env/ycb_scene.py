@@ -264,8 +264,8 @@ class SimulatedYCBEnv():
         
         # create the shelf  x-0.5, y+0.5
         orientation = p.getQuaternionFromEuler([0, 0, 0])
-        #Henry 20240201 y從0.5改成0.7
-        self.cabinet_pos = np.array([0.9 - self._shift[0], 0.1 - self._shift[1], -.82 - self._shift[2]])
+        #Henry 20240603 從0.95改成1.05
+        self.cabinet_pos = np.array([1.05 - self._shift[0], 0. - self._shift[1], -.82 - self._shift[2]])
         self.cabinet_id = p.loadURDF(cabinet_file, [self.cabinet_pos[0], self.cabinet_pos[1], self.cabinet_pos[2]],
                                   [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=True)
         self.table_pos = np.array([0.-self._shift[0], -0.5 - self._shift[1], -.82 - self._shift[2]])

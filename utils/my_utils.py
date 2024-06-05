@@ -176,6 +176,8 @@ def adjust_pose_with_bias(pose, bias, option="ef"):
         return pose@transZ(bias)
     elif option == "world":
         return transZ(bias)@pose
+    elif option == "world_x":
+        return transX(bias)@pose
     
 def move_gripper_smoothly(env, p, start_opening, target_opening, steps=8000):
     """

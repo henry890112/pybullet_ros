@@ -233,7 +233,7 @@ class TM5:
             ("wrist_3_link", "flange_link"),
         }
         
-        threshold = 0.  # 定義檢查碰撞的距離閾值
+        threshold = -0.03  # 定義檢查碰撞的距離閾值
 
         # 遍歷所有指定的連結對
         for name_i in check_links:
@@ -250,6 +250,10 @@ class TM5:
                 if closest_points:
                     # 如果發現任何連結對的最近點小於閾值，認為發生了碰撞
                     print(f"連結 {name_i} 和連結 {name_j} 的最近距離小於 {threshold} 米")
+                    # 印出碰撞的最近點距離
+                    for point in closest_points:
+                        print(f"最近點距離：{point[8]} 米")
+
                     return True
 
         return False  # 如果所有指定連結對的最近點都不小於閾值，認為沒有碰撞

@@ -435,6 +435,16 @@ class PlacingNode:
                 continue
                 
             # 第三次執行計劃並檢查
+            if self.placing_stage == 1:
+                print("*****additional condition angle!!!!!!!*****")
+                    # 印出角度degree
+                print(np.degrees(np.arccos(np.dot(grasp_pose[:3, 2], np.array([1, 0, 0])))))
+                # 檢查grasp_pose的z軸是否和world的x軸小於30度, 若大於10度則continue
+                if np.degrees(np.arccos(np.dot(grasp_pose[:3, 2], np.array([1, 0, 0])))) > 15:
+                    print("*****additional condition*****")
+                    # 印出角度degree
+                    print(np.degrees(np.arccos(np.dot(grasp_pose[:3, 2], np.array([1, 0, 0])))))
+                    continue
             pose_z_bias = adjust_pose_with_bias(grasp_pose, 0.1)
             plan_checker, checker = self.execute_plan_with_check(pose_z_bias, execute)
             print("=====================================================")

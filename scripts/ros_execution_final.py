@@ -41,6 +41,11 @@ class ExecutionNode:
         self.path_length = 20
         self.vis_pcd = False
 
+        '多物體擺放策略'
+        self.count_location = 0
+        self.placing_location = [0.2, 0, -0.2]
+        # stage2 是最上面的貨價
+        self.placing_stage = 2
 
 
     def initial(self):
@@ -67,7 +72,7 @@ class ExecutionNode:
         self.pc_segments_path = None
         self.pc_segments_noise_path = None
 
-        
+
 
         '場景設置相關 data'
         '''
@@ -80,8 +85,7 @@ class ExecutionNode:
         single_release/if_stack = f/f: 丟物體在桌上 有遮擋
         single_release/if_stack = t/f: 丟物體在桌上 有遮擋
         '''
-        # stage2 是最上面的貨價
-        self.placing_stage = 2
+
         self.num_object = 1
         # self.single_release =True
         # self.if_stack = True
@@ -152,7 +156,7 @@ class ExecutionNode:
         file = os.path.join(self.parent_directory, "object_index", 'contact_plane_object.json')
         with open(file) as f:
             file_dir = json.load(f)
-        file_dir = file_dir['025_mug_1.0']
+        file_dir = file_dir['BBQSauce_1.0']
         file_dir = [f[:-5] for f in file_dir]
         test_file_dir = list(set(file_dir))
         self.env = SimulatedYCBEnv()
@@ -301,7 +305,7 @@ class ExecutionNode:
     
     def get_multiview_data(self):
         # multiview use reset or not
-        execute = True
+        execute = False
         self.env._panda.reset()
         end_points = [self.init_ef_mat, self.left_view_ef_mat, self.right_view_ef_mat]
         views_dict = {"origin": 0, "left": 1, "right": 2}
@@ -515,16 +519,21 @@ class ExecutionNode:
         # cabinet_pose_world_stage2[2, 3] += 0.4
 
         # stage1 
-        cabinet_pose_world_stage1[0, 3] += -0.3
+        cabinet_pose_world_stage1[0, 3] += -0.35
         cabinet_pose_world_stage1[1, 3] += 0.
-        cabinet_pose_world_stage1[2, 3] += 0.2
+        cabinet_pose_world_stage1[2, 3] += 0.3
 
         # stage2
-        cabinet_pose_world_stage2[0, 3] += -0.3
+        cabinet_pose_world_stage2[0, 3] += -0.35
         cabinet_pose_world_stage2[1, 3] += 0.
-        cabinet_pose_world_stage2[2, 3] += 0.4
+        cabinet_pose_world_stage2[2, 3] += 0.55
 
+        # 利用self.placing_location來決定物體的放置位置y
+        print('******************count_location = ', self.count_location)
+        cabinet_pose_world_stage1[1, 3] += self.placing_location[self.count_location]
+        cabinet_pose_world_stage2[1, 3] += self.placing_location[self.count_location]
         
+            
 
         # chose the cabinet pose
         if self.placing_stage == 1:
@@ -570,7 +579,7 @@ class ExecutionNode:
         if self.vis_draw_coordinate:
             self.env.draw_ef_coordinate(END_POINT, 5)
         plan = self.expert_plan(pack_pose(END_POINT), world=True, visual=False)
-        _ = self.execute_motion_plan(self.env, plan, execute=execute, gripper_set=gripper_state, repeat=repeat)
+        _ = self.execute_motion_plan(plan, execute=execute, gripper_set=gripper_state, repeat=repeat)
         checker = check_pose_difference(self.env._get_ef_pose(mat=True), END_POINT, tolerance)
         if not checker:
             print("位姿不正確，請檢查位姿")
@@ -581,12 +590,23 @@ class ExecutionNode:
         # set the poses of the robot
         self.final_grasp_pose_z_bias = adjust_pose_with_bias(self.final_grasp_pose, -0.1, option="ef")
         if self.placing_stage == 1:
-            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.55)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.45)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
         elif self.placing_stage == 2:
-            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.55)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
-        self.final_place_pose_z_bias_top = adjust_pose_with_bias(self.final_place_grasp_pose, 0.10, option="world")
+            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.65)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+
+        if self.placing_stage == 1:
+            self.final_place_pose_z_bias_top = adjust_pose_with_bias(self.final_place_grasp_pose, 0.03, option="world")
+            self.final_place_pose_z_bias_top = adjust_pose_with_bias(self.final_place_pose_z_bias_top, -0.0, option="world_x")
+        elif self.placing_stage == 2:
+            self.final_place_pose_z_bias_top = adjust_pose_with_bias(self.final_place_grasp_pose, 0.03, option="world")
         self.final_place_pose_z_bias_placing = adjust_pose_with_bias(self.final_place_grasp_pose, 0.015, option="world")
-        self.final_place_pose_z_bias_release = adjust_pose_with_bias(self.final_place_grasp_pose, -0.1, option="ef")
+        self.final_place_pose_z_bias_release = adjust_pose_with_bias(self.final_place_grasp_pose, -0.05, option="ef")
+        
+        if(self.count_location == 2):
+            self.placing_stage = 1 if self.placing_stage == 2 else 2
+            self.count_location = 0
+        else:
+            self.count_location += 1
 
         # start execute the setting poses
         self.execute_motion_and_check_pose(self.final_grasp_pose_z_bias, gripper_state="open")
@@ -696,6 +716,8 @@ class ExecutionNode:
 
         with open(os.path.join(self.parent_directory, 'results/obejct_record.txt'), 'a') as f:
             f.write(f"target_name: {target_name}\n")
+            # save the stage and location
+            f.write(f"stage: {self.placing_stage}; location: {self.count_location}\n")
             f.write(f"total: {self.success_rates[target_name]['total']}\n")
             f.write(f"successful: {self.success_rates[target_name]['successful']}\n")
             f.write(f"no_grasp_pose: {self.success_rates[target_name]['no_grasp_pose']}\n")

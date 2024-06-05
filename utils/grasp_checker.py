@@ -51,7 +51,7 @@ class ValidGraspChecker():
         p.resetBasePositionAndOrientation(self.robot, [0, 0, -100],
                                           [0.000000, 0.000000, 0.000000, 1.000000])
 
-    def draw_aabb(self, target_id, lifetime=5):
+    def draw_aabb(self, target_id, lifetime=5, cabinet_stage=2):
         """
         在 PyBullet 環境中繪製指定物體的 AABB（軸對齊包圍盒）。
 
@@ -61,7 +61,10 @@ class ValidGraspChecker():
         # for i in range(p.getNumJoints(target_id)):
         #     print(i)
         #     target_box = p.getAABB(target_id, i)
-        target_box = p.getAABB(target_id, 3)
+        if cabinet_stage == 2:
+            target_box = p.getAABB(target_id, 2)
+        elif cabinet_stage == 3:
+            target_box = p.getAABB(target_id, 3)
 
         min_point = target_box[0]
         max_point = target_box[1]
@@ -121,7 +124,9 @@ class ValidGraspChecker():
 
         table_box = np.array(p.getAABB(self.env.table_id))
         # table_box = self.draw_aabb(self.env.table_id, 5)
-        cabinet_box = self.draw_aabb(self.env.cabinet_id, 5)
+        cabinet_box = self.draw_aabb(self.env.cabinet_id, 5, 3)
+        cabinet_box2 = self.draw_aabb(self.env.cabinet_id, 10, 2)
+
 
         valid_grasp = []
         valid_grasp_index = []
@@ -141,6 +146,7 @@ class ValidGraspChecker():
             elbow_point = f_pose.dot(unpack_pose([0., -0.16, -0.07, 1., 0., 0., 0.]))
             box_min_table, box_max_table = table_box - elbow_point[:3, 3]
             box_min_cabinet, box_max_cabinet = cabinet_box - elbow_point[:3, 3]
+            box_min_cabinet2, box_max_cabinet2 = cabinet_box2 - elbow_point[:3, 3]
 
             if len(p.getClosestPoints(self.robot, self.env.table_id, distance)):
                 continue
@@ -149,6 +155,8 @@ class ValidGraspChecker():
             elif (filter_elbow) and (len(box_min_table[box_min_table < 0]) == 3) and (len(box_max_table[box_max_table > 0]) == 3):
                 continue
             elif (filter_elbow) and (len(box_min_cabinet[box_min_cabinet < 0]) == 3) and (len(box_max_cabinet[box_max_cabinet > 0]) == 3):
+                continue
+            elif (filter_elbow) and (len(box_min_cabinet2[box_min_cabinet2 < 0]) == 3) and (len(box_max_cabinet2[box_max_cabinet2 > 0]) == 3):
                 continue
 
             for uid in placed_uid:

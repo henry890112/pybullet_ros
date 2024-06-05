@@ -128,7 +128,50 @@ class ros_node(object):
         np.save("/home/user/henry_pybullet_ws/src/pybullet_ros/realworld_data/multiview_pc_obs_cam.npy", self.multiview_pc_obs)
         np.save("/home/user/henry_pybullet_ws/src/pybullet_ros/realworld_data/multiview_pc_target_cam.npy", self.multiview_pc_target)
 
+    def get_the_target_on_cabinet_pose(self):
+        self.placing_location = [0.15, 0, -0.15]
+        place_pose_base = np.array([[-0.99914546, 0.03692962,  0.0185621,   0.6598179],
+                                    [-0.03680726, -0.99929862,  0.00689135,  0.04792305],
+                                    [ 0.01880358,  0.00620224,  0.99980396,  0.35],
+                                    [ 0. ,         0. ,         0.,          1.        ]]
+                                    )
+        place_pose_base[1, 3] += self.placing_location[1]
+        place_pose_base[2, 3] += self.get_normal_translation()
+        # place_pose_base[2, 3] += self.target_center[2]
+        print('z_translation = {}'.format(self.target_center[2]))
+        return place_pose_base
 
+    def get_oriented_bounding_box(self):
+        self.pc_segments_pcd = o3d.geometry.PointCloud()
+        self.pc_segments_pcd.points = o3d.utility.Vector3dVector(self.multiview_pc_target)
+        self.pc_segments_pcd.paint_uniform_color([0.0, 0.0, 0.0])
+        self.pc_segments_pcd.estimate_normals()
+        obb = self.pc_segments_pcd.get_oriented_bounding_box()
+        obb.color = (1, 0, 0) 
+        o3d.visualization.draw_geometries([self.pc_segments_pcd, obb])
+        return obb
+
+
+    def get_normal_translation(self):
+        obb = self.get_oriented_bounding_box()
+        x_vec = obb.get_box_points()[0] - obb.get_box_points()[1]
+        y_vec = obb.get_box_points()[0] - obb.get_box_points()[2]
+        z_vec = obb.get_box_points()[0] - obb.get_box_points()[3]
+        x_length = np.linalg.norm(obb.get_box_points()[0] - obb.get_box_points()[1])
+        y_length = np.linalg.norm(obb.get_box_points()[0] - obb.get_box_points()[2])
+        z_length = np.linalg.norm(obb.get_box_points()[0] - obb.get_box_points()[3])
+
+        #define the x,y,z axis length in array and get the index number of the min length
+        vector = np.array([x_vec, y_vec, z_vec])
+        length = np.array([x_length, y_length, z_length])
+        print('x = {}(m)\ny = {}(m)\nz = {}(m)'.format(length[0], length[1], length[2]))
+
+        min_length_index = np.argmin(length)
+        max_length_index = np.argmax(length)
+
+        target_z_translation = length[max_length_index]/2
+        return target_z_translation
+    
     def get_env_callback(self, msg):
         if msg.data == 0:
 
@@ -156,22 +199,27 @@ class ros_node(object):
             # get the target pose (stable plane on target object)
             # self.target_pose_base = stable_plane_cvae_net
             '''
+            # # pack object
+            # target_pose_base = np.eye(4)
+            # # get the center of the multiview_pc_target_base
+            # self.target_center = np.mean(self.multiview_pc_target_base, axis=0)
+            # target_pose_base[:3, 3] = self.target_center[:3]
+
+            # 平躺object
             target_pose_base = np.eye(4)
-            # get the center of the multiview_pc_target_base
-            target_center = np.mean(self.multiview_pc_target_base, axis=0)
-            target_pose_base[:3, 3] = target_center[:3]
+            self.target_center = np.mean(self.multiview_pc_target_base, axis=0)
+            target_pose_base[:3, 3] = self.target_center[:3]
+            target_pose_base[:3, 0] = np.array([0, 0, 1])
+            target_pose_base[:3, 1] = np.array([-1, 0, 0])
+            target_pose_base[:3, 2] = np.array([0, -1, 0])
+            # 手動旋轉x軸
+            target_pose_base = target_pose_base@ rotX(np.pi/2)
+            
 
             # get the place pose (can change to other place pose)
             # place_pose_base = self.actor.get_the_target_on_cabinet_pose()
             # get it from apriltag_inform.py
-            place_pose_base = np.array([[-0.99914546, 0.03692962,  0.0185621,   0.6598179],
-                                        [-0.03680726, -0.99929862,  0.00689135,  0.04792305],
-                                        [ 0.01880358,  0.00620224,  0.99980396,  0.35],
-                                        [ 0. ,         0. ,         0.,          1.        ]]
-                                        )
-            place_pose_base[1, 3] += 0.1
-            place_pose_base[2, 3] += target_center[2] + 0.1
-            print('z_translation = {}'.format(target_center[2]))
+            place_pose_base = self.get_the_target_on_cabinet_pose()
             print("***********Finish get target pose*************\n")
 
             # step 2: get the contact grasp
