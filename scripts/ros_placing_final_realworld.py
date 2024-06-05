@@ -54,7 +54,7 @@ class PlacingNode:
 
         '場景設置相關 data'
         # stage2 是最上面的貨價
-        self.placing_stage = 2
+        self.placing_stage = 1
         self.num_object = 0
         self.single_release =False
         self.if_stack = False
@@ -415,7 +415,11 @@ class PlacingNode:
                 continue
 
             # 第二次執行計劃並檢查
-            mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.7)@ transX(0.2)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            if self.placing_stage == 1:
+                mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.45)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            elif self.placing_stage == 2:
+                mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.65)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+
             plan_checker, checker = self.execute_plan_with_check(mid_retract_pose, execute)
             print("=====================================================")
             if self.visual_simulation:
