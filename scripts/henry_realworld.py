@@ -25,6 +25,7 @@ from sensor_msgs import point_cloud2
 from geometry_msgs.msg import Pose, TransformStamped
 from utils.grasp_checker import ValidGraspChecker
 
+from pybullet_ros.srv import GetTargetMatrix, GetTargetMatrixRequest
 
 class ros_node(object):
     def __init__(self, renders):
@@ -57,7 +58,18 @@ class ros_node(object):
         self.mid_retract_pose = None
         self.envir_joint = [1.6208316641972509-np.pi/2, -0.98, 1.46939, -0.119555, 1.63676, -0.05]
         rospy.loginfo("Init finished")
+        self.get_target_matrix = False
 
+    def get_target_matrix(self, multiview_pointcloud):
+        rospy.wait_for_service('get_target_matrix')
+        try:
+            get_target_matrix_service = rospy.ServiceProxy('get_target_matrix', GetTargetMatrix)
+            req = GetTargetMatrixRequest(multiview_pc_target_base=multiview_pointcloud.flatten().tolist())
+            res = get_target_matrix_service(req)
+            target_matrix = np.array(res.target_matrix).reshape(4, 4)
+            return target_matrix
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call failed: %s" % e)
 
     def joint_callback(self, msg):
         cur_states = np.asarray(msg.position)
@@ -184,8 +196,8 @@ class ros_node(object):
         return target_z_translation
     
     def get_env_callback(self, msg):
-        if msg.data == 0:
-            self.placing_stage = 2   # 放最上面
+        if msg.data == 0 or msg.data == 11:
+            self.placing_stage = 2 if msg.data == 0 else 1
             self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.65)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
             # Reset the gripper
             self.control_gripper("reset")
@@ -226,6 +238,10 @@ class ros_node(object):
             target_pose_base[:3, 2] = np.array([0, -1, 0])
             # 手動旋轉x軸
             target_pose_base = target_pose_base@ rotX(np.pi/4)
+
+            if self.get_target_matrix:
+                target_pose_base = self.get_target_matrix(self.multiview_pointcloud)
+                print("Received target matrix:\n", target_pose_base)
             
 
             # get the place pose (can change to other place pose)
@@ -302,166 +318,6 @@ class ros_node(object):
             print(f"***********Finish robot grasping***********\n")
 
             # step 6: move to the place pose
-            
-
-            # 可以微調place pose!!!!
-            self.move_along_path(success_joint_mid_list)
-            self.move_along_path(success_joint_place_list)
-            ef_pose = self.get_ef_pose()
-            forward_mat = np.eye(4)
-            forward_mat[2, 3] = 0.
-            ef_pose = forward_mat.dot(ef_pose)
-            quat_pose = pack_pose(ef_pose)
-            final_place_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
-            self.set_pose(final_place_pose[0], final_place_pose[1])
-            time.sleep(2)
-            # if self.placing_stage == 1:
-            #     # step 6.5: move forward 5cm
-            #     ef_pose = self.get_ef_pose()
-            #     forward_mat = np.eye(4)
-            #     forward_mat[2, 3] += 0.05
-            #     ef_pose = forward_mat.dot(ef_pose)
-            #     quat_pose = pack_pose(ef_pose)
-            #     final_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
-            #     self.set_pose(final_pose[0], final_pose[1])
-            # Open gripper
-            self.control_gripper("set_pose", 0.085)
-            print(f"***********Finish robot placing***********\n")
-            time.sleep(1)
-
-            # step 7: move back 5cm
-            ef_pose = self.get_ef_pose()
-            forward_mat = np.eye(4)
-            forward_mat[2, 3] -= 0.05
-            ef_pose = ef_pose.dot(forward_mat)
-            quat_pose = pack_pose(ef_pose)
-            final_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
-            self.set_pose(final_pose[0], final_pose[1])
-
-            # step 8: move back to the home joint
-            self.move_along_path(self.home_joint_point)
-            print("***********Finish the placing task***********\n")
-        
-        if msg.data == 11:
-            self.placing_stage = 1
-            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.45)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
-            # Reset the gripper
-            self.control_gripper("reset")
-            time.sleep(1)
-            self.control_gripper("set_pose", 0.)
-            time.sleep(1)
-            self.control_gripper("set_pose", 0.085)
-            print(f"finish grasping")
-
-            # Pybullet setup
-            self.actor.load_environment()
-            self.actor.env._panda.reset(self.home_joint_point[0]+[0, 0, 0])
-            self.actor.initial()
-            self.actor.grasp_checker = ValidGraspChecker(self.actor.env)
-
-            # multi-view data
-            self.get_multiview_data()
-            print(f"self.obs_points: {self.obs_points}")
-            print("***********Finish get multiview data*************\n")
-
-            # step 1: get the stable plane (6d pose) on target object
-            '''
-            # get the target pose (stable plane on target object)
-            # self.target_pose_base = stable_plane_cvae_net
-            '''
-            # # pack object
-            # target_pose_base = np.eye(4)
-            # # get the center of the multiview_pc_target_base
-            # self.target_center = np.mean(self.multiview_pc_target_base, axis=0)
-            # target_pose_base[:3, 3] = self.target_center[:3]
-
-            # 平躺object
-            target_pose_base = np.eye(4)
-            self.target_center = np.mean(self.multiview_pc_target_base, axis=0)
-            target_pose_base[:3, 3] = self.target_center[:3]
-            target_pose_base[:3, 0] = np.array([0, 0, 1])
-            target_pose_base[:3, 1] = np.array([-1, 0, 0])
-            target_pose_base[:3, 2] = np.array([0, -1, 0])
-            # 手動旋轉x軸
-            target_pose_base = target_pose_base@ rotX(np.pi/4)
-            
-
-            # get the place pose (can change to other place pose)
-            # place_pose_base = self.actor.get_the_target_on_cabinet_pose()
-            # get it from apriltag_inform.py
-            place_pose_base = self.get_the_target_on_cabinet_pose()
-            print("***********Finish get target pose*************\n")
-
-            # step 2: get the contact grasp
-            '''
-            # 要放camrea frame的點雲來去生成contact grasp
-            # grasp_poses_camera = self.setting_contact_req(obstacle_points=self.obs_points, target_points=self.target_points)
-            '''
-            grasp_poses_camera = self.setting_contact_req(obstacle_points=self.obs_points, target_points=self.target_points)
-
-            # self.visual_pc(obs_points_base)
-            
-            self.grasp_list = []
-            self.score_list = []
-            for grasp_pose_cam in grasp_poses_camera:
-                grasp_camera = np.array(grasp_pose_cam.pred_grasps_cam)
-                grasp_world = self.pose_cam2base(grasp_camera.reshape(4,4))
-                self.grasp_list.append(grasp_world)
-                self.score_list.append(grasp_pose_cam.score)
-            # if self.vis_pcd == True:
-            self.visualize_points_grasppose(self.multiview_pc_obs_base, self.grasp_list)
-
-            if len(self.grasp_list) == 0:
-                print("No valid grasp found")
-                return
-            print("***********Finish generating grasp poses*************\n")
-            
-            # step 3: transform the grasp pose to the place pose
-            self.grasp_place_list = []
-            for grasp_pose in self.grasp_list:
-                relative_grasp_transform = np.linalg.inv(target_pose_base)@ grasp_pose
-                self.grasp_place_list.append(place_pose_base@ relative_grasp_transform)
-
-            # adjust the raw grasp pose to pre-grasp pose
-            grasp_place_list = self.grasp2pre_grasp(self.grasp_place_list, drawback_dis=0.05)
-            
-            # step 4: grasp pose filter
-            self.actor.grasp_pose_checker_base(grasp_place_list)
-            self.actor.refine_grasp_place_pose_base(self.score_list)
-            succuss_result = self.actor.execute_placing_checker_base(place_pose_base, target_pose_base, self.mid_retract_pose)
-            # 判断结果是否为单位矩阵
-            if isinstance(succuss_result, np.ndarray) and np.array_equal(succuss_result, np.eye(4)):
-                print("Result is the identity matrix.")
-                raise ValueError("No valid grasp pose")
-            else:
-                print("Result is not the identity matrix.")
-                success_grasp_pose, success_joint_grasp_list, success_joint_mid_list, success_joint_place_list = succuss_result
-                print(f"success_grasp_pose: {success_grasp_pose}\n")
-                print(f"success_joint_grasp_list: {success_joint_grasp_list}\n")
-                print(f"success_joint_mid_list: {success_joint_mid_list}\n")
-                print(f"success_joint_place_list: {success_joint_place_list}\n")
-
-            print("***********Finish grasp poses filtered*************\n")
-
-            # step 5: move to the grasp pose
-            self.move_along_path(success_joint_grasp_list)
-            ef_pose = self.get_ef_pose()
-            forward_mat = np.eye(4)
-            forward_mat[2, 3] = 0.1
-            ef_pose = ef_pose.dot(forward_mat)
-            quat_pose = pack_pose(ef_pose)
-            final_grasp_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
-            self.set_pose(final_grasp_pose[0], final_grasp_pose[1])
-
-            # Close gripper
-            time.sleep(1)
-            self.control_gripper("set_pose", 0.)
-            time.sleep(1)
-            print(f"***********Finish robot grasping***********\n")
-
-            # step 6: move to the place pose
-            
-
             # 可以微調place pose!!!!
             self.move_along_path(success_joint_mid_list)
             self.move_along_path(success_joint_place_list)
