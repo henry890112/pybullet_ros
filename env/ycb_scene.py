@@ -265,7 +265,7 @@ class SimulatedYCBEnv():
         # create the shelf  x-0.5, y+0.5
         orientation = p.getQuaternionFromEuler([0, 0, 0])
         #Henry 20240603 從0.95改成1.05
-        self.cabinet_pos = np.array([1.05 - self._shift[0], 0. - self._shift[1], -.82 - self._shift[2]])
+        self.cabinet_pos = np.array([0.95 - self._shift[0], 0. - self._shift[1], -.82 - self._shift[2]])
         self.cabinet_id = p.loadURDF(cabinet_file, [self.cabinet_pos[0], self.cabinet_pos[1], self.cabinet_pos[2]],
                                   [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=True)
         self.table_pos = np.array([0.-self._shift[0], -0.5 - self._shift[1], -.82 - self._shift[2]])
@@ -338,7 +338,7 @@ class SimulatedYCBEnv():
         # Set table and plane
         plane_file = os.path.join(self.root_dir,  'data/objects/floor/model_normalized.urdf')  # _white
         table_file = os.path.join(self.root_dir,  'data/objects/table/models/model_normalized.urdf')
-        cabinet_file = os.path.join(self.root_dir,  'data/objects/cabinet/new_model.urdf')
+        cabinet_file = os.path.join(self.root_dir,  'data/real_shelf.urdf')
         place_object_file = os.path.join(self.root_dir,  'data/objects/004_sugar_box/model_normalized.urdf')
 
 
@@ -362,17 +362,18 @@ class SimulatedYCBEnv():
         self.obj_path = [plane_file, table_file]
 
         self.plane_id = p.loadURDF(plane_file, [0 - self._shift[0], 0 - self._shift[1], -.82 - self._shift[2]])
-        self.table_pos = np.array([0.5 - self._shift[0], 0.0 - self._shift[1], -.82 - self._shift[2]])
-        self.table_id = p.loadURDF(table_file, [self.table_pos[0], self.table_pos[1], self.table_pos[2]],
-                                  [0.707, 0., 0., 0.707])
         # create the shelf  x-0.5, y+0.5
-        orientation = p.getQuaternionFromEuler([0, 0, np.pi/2])
-        self.cabinet_pos = np.array([-self._shift[0], 0.5 - self._shift[1], -.82 - self._shift[2]])
+        orientation = p.getQuaternionFromEuler([0, 0, 0])
+        #Henry 20240603 從0.95改成1.05
+        self.cabinet_pos = np.array([1.05 - self._shift[0], 0. - self._shift[1], -.82 - self._shift[2]])
         self.cabinet_id = p.loadURDF(cabinet_file, [self.cabinet_pos[0], self.cabinet_pos[1], self.cabinet_pos[2]],
-                                  [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=True, globalScaling=0.8)   # default 0.8
-
-        orientation = p.getQuaternionFromEuler([0, 0, np.pi/2])
-        self.place_object_pos = np.array([ -0.15 - self._shift[0], 0.5 - self._shift[1], -.4 - self._shift[2]])
+                                  [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=True)
+        self.table_pos = np.array([0.-self._shift[0], -0.5 - self._shift[1], -.82 - self._shift[2]])
+        self.table_id = p.loadURDF(table_file, [self.table_pos[0], self.table_pos[1], self.table_pos[2]],
+                                  [0.707, 0., 0., 0.707], useFixedBase=True)   # default 0.8
+        
+        orientation = p.getQuaternionFromEuler([0, 0, 0])
+        self.place_object_pos = np.array([ 0.8 - self._shift[0], 0.- self._shift[1], -0.15-self._shift[2]])
         self.place_object_id = p.loadURDF(place_object_file, [self.place_object_pos[0], self.place_object_pos[1], self.place_object_pos[2]],
                                   [orientation[0], orientation[1], orientation[2], orientation[3]], useFixedBase=False, globalScaling=1.) 
 
@@ -1321,19 +1322,20 @@ class SimulatedYCBEnv():
     def clean_debug_line(self):
         p.removeAllUserDebugItems()
 
-    def get_pcd(self, pcd_id, file_name, raw_data=False, vis=False):
+    def get_pcd(self, pcd_id, path, raw_data=False, vis=False):
 
-        file_name = file_name
         obs, joint_pos, camera_info, pose_info, intrinsic = self._get_observation(raw_data = raw_data)
         pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(obs[0][:3].T)
+        print(obs[0][:3].T)
+        pcd.points = o3d.utility.Vector3dVector(obs[0][:3].T/1000)
         axis_pcd = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
         # print the points number
         print(np.asarray(pcd.points).shape)
         if vis:
             o3d.visualization.draw_geometries([pcd]+ [axis_pcd])
-        o3d.io.write_point_cloud(f"./{file_name}/{pcd_id}.pcd", pcd, write_ascii=True)
-        o3d.io.write_point_cloud(f"./{file_name}/{pcd_id}.ply", pcd, write_ascii=True)
+        result_path = path
+        o3d.io.write_point_cloud(result_path, pcd, write_ascii=True)
+        o3d.io.write_point_cloud(result_path, pcd, write_ascii=True)
 
 if __name__ == '__main__':
     pass
