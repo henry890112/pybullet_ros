@@ -26,6 +26,8 @@ from geometry_msgs.msg import Pose, TransformStamped
 from utils.grasp_checker import ValidGraspChecker
 
 from pybullet_ros.srv import GetTargetMatrix, GetTargetMatrixRequest
+from std_srvs.srv import Empty
+
 
 class ros_node(object):
     def __init__(self, renders):
@@ -38,9 +40,9 @@ class ros_node(object):
         self.tf_buffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tf_buffer)  # Create a tf listener
 
-        self.points_sub = rospy.Subscriber("/uoais/Pointclouds", PointCloud2, self.points_callback)
-        self.obs_points_sub = rospy.Subscriber("/uoais/obs_pc", PointCloud2, self.obs_points_callback)
-        self.seg_pub = rospy.Publisher("/uoais/data_init", Int32, queue_size=1)
+        # self.points_sub = rospy.Subscriber("/uoais/Pointclouds", PointCloud2, self.points_callback)
+        # self.obs_points_sub = rospy.Subscriber("/uoais/obs_pc", PointCloud2, self.obs_points_callback)
+        # self.seg_pub = rospy.Publisher("/uoais/data_init", Int32, queue_size=1)
 
         self.contact_client = rospy.ServiceProxy('contact_graspnet/get_grasp_result', GraspGroup)
         rospy.wait_for_service('contact_graspnet/get_grasp_result', timeout=None)
@@ -58,18 +60,8 @@ class ros_node(object):
         self.mid_retract_pose = None
         self.envir_joint = [1.6208316641972509-np.pi/2, -0.98, 1.46939, -0.119555, 1.63676, -0.05]
         rospy.loginfo("Init finished")
-        self.get_target_matrix = False
+        self.use_cvae  = True
 
-    def get_target_matrix(self, multiview_pointcloud):
-        rospy.wait_for_service('get_target_matrix')
-        try:
-            get_target_matrix_service = rospy.ServiceProxy('get_target_matrix', GetTargetMatrix)
-            req = GetTargetMatrixRequest(multiview_pc_target_base=multiview_pointcloud.flatten().tolist())
-            res = get_target_matrix_service(req)
-            target_matrix = np.array(res.target_matrix).reshape(4, 4)
-            return target_matrix
-        except rospy.ServiceException as e:
-            rospy.logerr("Service call failed: %s" % e)
 
     def joint_callback(self, msg):
         cur_states = np.asarray(msg.position)
@@ -111,8 +103,8 @@ class ros_node(object):
                 self.multiview_pc_target_base.append(self.target_points_base)
                 print(self.target_points_base.shape)
 
-            if self.vis_pcd == True:
-                self.visual_pc(self.target_points_base)
+            # if self.vis_pcd == True:
+                # self.visual_pc(self.target_points_base)
             self.move_along_path(self.home_joint_point)
 
             
@@ -129,12 +121,31 @@ class ros_node(object):
 
         # Visualize the concatenated pointclouds
         if self.vis_pcd == True:
-            self.visual_pc(self.multiview_pc_obs_base)
+            # self.visual_pc(self.multiview_pc_obs_base)
+            print('***********', self.multiview_pc_target_base.shape)
             self.visual_pc(self.multiview_pc_target_base)
-        print(self.multiview_pc_target_base.shape)
         # self.visual_pc(self.multiview_pc_obs)
         # self.visual_pc(self.multiview_pc_target)
         
+        
+        # 创建Open3D点云对象
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(self.multiview_pc_target_base)
+        cl, ind = pcd.remove_statistical_outlier(nb_neighbors=40, std_ratio=3)
+        pcd_inlier = pcd.select_by_index(ind)
+        self.multiview_pc_target_base = np.asarray(pcd_inlier.points)
+        print('***********', self.multiview_pc_target_base.shape)
+        self.visual_pc(self.multiview_pc_target_base)
+
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(self.multiview_pc_target)
+        cl, ind = pcd.remove_statistical_outlier(nb_neighbors=40, std_ratio=3)
+        pcd_inlier = pcd.select_by_index(ind)
+        self.multiview_pc_target = np.asarray(pcd_inlier.points)
+        print('***********', self.multiview_pc_target.shape)
+        self.visual_pc(self.multiview_pc_target)
+
+
         # save the pointclouds as npy file
         np.save("/home/user/henry_pybullet_ws/src/pybullet_ros/realworld_data/multiview_pc_obs.npy", self.multiview_pc_obs_base)
         np.save("/home/user/henry_pybullet_ws/src/pybullet_ros/realworld_data/multiview_pc_target.npy", self.multiview_pc_target_base)
@@ -198,7 +209,11 @@ class ros_node(object):
     def get_env_callback(self, msg):
         if msg.data == 0 or msg.data == 11:
             self.placing_stage = 2 if msg.data == 0 else 1
-            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.65)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            if self.placing_stage == 2:
+                self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.65)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            elif self.placing_stage == 1:
+                self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.45)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            
             # Reset the gripper
             self.control_gripper("reset")
             time.sleep(1)
@@ -214,7 +229,7 @@ class ros_node(object):
             self.actor.grasp_checker = ValidGraspChecker(self.actor.env)
 
             # multi-view data
-            self.get_multiview_data()
+            # self.get_multiview_data()
             print(f"self.obs_points: {self.obs_points}")
             print("***********Finish get multiview data*************\n")
 
@@ -238,11 +253,11 @@ class ros_node(object):
             target_pose_base[:3, 2] = np.array([0, -1, 0])
             # 手動旋轉x軸
             target_pose_base = target_pose_base@ rotX(np.pi/4)
-
-            if self.get_target_matrix:
-                target_pose_base = self.get_target_matrix(self.multiview_pointcloud)
-                print("Received target matrix:\n", target_pose_base)
             
+            # TODO use cvae to get target 6d pose
+            if self.use_cvae:
+                target_pose_base = self.target_matrix
+            print(target_pose_base)
 
             # get the place pose (can change to other place pose)
             # place_pose_base = self.actor.get_the_target_on_cabinet_pose()
@@ -255,6 +270,8 @@ class ros_node(object):
             # 要放camrea frame的點雲來去生成contact grasp
             # grasp_poses_camera = self.setting_contact_req(obstacle_points=self.obs_points, target_points=self.target_points)
             '''
+            print(f"self.obs_points: {self.obs_points}")
+            print(f"self.target_points: {self.target_points}")
             grasp_poses_camera = self.setting_contact_req(obstacle_points=self.obs_points, target_points=self.target_points)
 
             # self.visual_pc(obs_points_base)
@@ -411,13 +428,6 @@ class ros_node(object):
             self.move_along_path([self.envir_joint])
 
         elif msg.data == 5:
-            # multi-view data
-            self.get_multiview_data()
-            self.get_oriented_bounding_box()
-            print('z_translation = {}'.format(self.get_normal_translation()))
-            print("***********Finish get multiview data*************\n")
-
-        elif msg.data == 6:
             # step 7: move back 5cm
             ef_pose = self.get_ef_pose()
             forward_mat = np.eye(4)
@@ -427,13 +437,102 @@ class ros_node(object):
             final_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
             self.set_pose(final_pose[0], final_pose[1])
 
-        elif msg.data == 7:
-            # april tag callibration
-            # Reset the gripper
-            self.control_gripper("reset")
-            time.sleep(1)
-            # close the gripper
-            self.control_gripper("set_pose", 0.)
+        elif msg.data == 6:
+            # # april tag callibration
+            # # Reset the gripper
+            # self.control_gripper("reset")
+            # time.sleep(1)
+            # # close the gripper
+            # self.control_gripper("set_pose", 0.)
+            # reset the contact graspnet
+            # parent_directory = os.path.join(os.path.dirname(__file__))
+            # multiview_path_obs = os.path.join(parent_directory, f'../realworld_data/multiview_pc_obs_cam.npy')
+            # multiview_path_target = os.path.join(parent_directory, f'../realworld_data/multiview_pc_target_cam.npy')
+
+            # multiview_pointcloud_obs = np.load(multiview_path_obs)
+            # multiview_pointcloud_target = np.load(multiview_path_target)
+            # indices = np.random.choice(multiview_pointcloud_obs.shape[0], 1024, replace=False)
+            # multiview_pointcloud_obs = multiview_pointcloud_obs[indices]
+            # indices = np.random.choice(multiview_pointcloud_target.shape[0], 1024, replace=False)
+            # multiview_pointcloud_target = multiview_pointcloud_target[indices]
+
+            # print(self.multiview_pc_obs_base.shape)
+            # print(self.multiview_pc_target_base.shape)
+            grasp_poses_camera = self.setting_contact_req(obstacle_points=self.obs_points, target_points=self.target_points)
+            self.grasp_list = []
+            self.score_list = []
+            for grasp_pose_cam in grasp_poses_camera:
+                grasp_camera = np.array(grasp_pose_cam.pred_grasps_cam)
+                grasp_world = self.pose_cam2base(grasp_camera.reshape(4,4))
+                self.grasp_list.append(grasp_world)
+                self.score_list.append(grasp_pose_cam.score)
+            # if self.vis_pcd == True:
+            self.visualize_points_grasppose(self.multiview_pc_obs_base, self.grasp_list)
+            print("********Init Contact GraspNet***********\n")
+
+
+
+        elif msg.data == 7 or msg.data == 70:
+            '''
+            only multiview to get multiview_pc_target_base points
+            '''
+            if msg.data == 7:
+                
+                self.points_sub = rospy.Subscriber("/uoais/Pointclouds", PointCloud2, self.points_callback)
+                self.obs_points_sub = rospy.Subscriber("/uoais/obs_pc", PointCloud2, self.obs_points_callback)
+                self.seg_pub = rospy.Publisher("/uoais/data_init", Int32, queue_size=1)
+                # multi-view data
+                self.get_multiview_data()
+                print(f"self.multiview_pc_target_base: {self.multiview_pc_target_base}")
+                self.get_oriented_bounding_box()
+                print('z_translation = {}'.format(self.get_normal_translation()))
+                print("***********Finish get multiview data*************\n")
+            if msg.data == 70:
+                self.shutdown_uoais_server()
+
+
+        elif msg.data == 8 or msg.data == 80:
+            '''
+            only use CVAE model to get target 6d pose
+            '''
+            if msg.data == 8:
+                # 等待服務可用
+                rospy.wait_for_service('get_target_matrix')
+                
+                try:
+                    get_target_matrix = rospy.ServiceProxy('get_target_matrix', GetTargetMatrix)
+                    
+                    # 構建請求
+                    req = GetTargetMatrixRequest()
+                    
+                    # 假設multiview_pc_target_base是一個包含點雲數據的列表，這裡用隨機數據作為示例
+                    # parent_directory = os.path.join(os.path.dirname(__file__))
+                    # result_list = ['blue_bottle', 'mug', 'small_mug', 'long_box', 'tap', 'wash_hand']
+                    # multiview_path = os.path.join(parent_directory, f'my_test_data/{result_list[0]}.npy')
+                    # multiview_pointcloud = np.load(multiview_path)
+                    multiview_pointcloud = self.multiview_pc_target_base
+                    multiview_pc_target_base = multiview_pointcloud.flatten().tolist()
+                    req.multiview_pc_target_base = multiview_pc_target_base
+                    
+                    # 呼叫服務並獲取響應
+                    resp = get_target_matrix(req)
+                    self.target_matrix = np.array(resp.target_matrix).reshape(4, 4)
+
+                    # 打印接收到的目標矩陣
+                    print("Received target matrix:")
+                    print(self.target_matrix)
+                
+                except rospy.ServiceException as e:
+                    print("Service call failed: %s" % e)
+            
+            if msg.data == 80:
+                self.shutdown_bandu_server()
+
+        elif msg.data == 9:
+            '''
+            test for multiview and then use CVAE to get the stable plane
+            must close the contact graspnet first!!!!!
+            '''
 
     def points_callback(self, msg):
         self.target_points = self.pc2_tranfer(msg)
@@ -578,7 +677,6 @@ class ros_node(object):
         grasp_poses = self.contact_client(contact_request).grasp_poses
 
         return grasp_poses
-    
 
     def grasp2pre_grasp(self, grasp_poses, drawback_dis=0.02):
         # This function will make the grasp poses retreat a little
@@ -736,6 +834,24 @@ class ros_node(object):
             gripper_command.rPR = uint_value
 
         self.robotiq_pub.publish(gripper_command)
+
+    def shutdown_bandu_server(self):
+        rospy.wait_for_service('shutdown_bandu')
+        try:
+            shutdown_service = rospy.ServiceProxy('shutdown_bandu', Empty)
+            shutdown_service()
+            rospy.loginfo("Shutdown bandu request sent.")
+        except rospy.ServiceException as e:
+            rospy.logwarn("Service call failed: %s" % e)
+    
+    def shutdown_uoais_server(self):
+        rospy.wait_for_service('shutdown_uoais')
+        try:
+            shutdown_service = rospy.ServiceProxy('shutdown_uoais', Empty)
+            shutdown_service()
+            rospy.loginfo("Shutdown bandu request sent.")
+        except rospy.ServiceException as e:
+            rospy.logwarn("Service call failed: %s" % e) 
     
 
 if __name__ == "__main__":

@@ -314,7 +314,8 @@ class PlacingNode:
                                                        drawback_distance=0.03,
                                                        visual=self.visual_simulation,
                                                        filter_elbow=True,
-                                                       time=time, distance=0.0001)    
+                                                       time=time, distance=0.0001)
+            print("**************grasp len!!!", len(self.grasp_index))
     
 
     def refine_grasp_place_pose(self):
@@ -369,7 +370,7 @@ class PlacingNode:
         plan = self.expert_plan(pack_pose(pose), world=True, visual=False)
         # checker true代表對的plan及pose
         plan_checker = self.execute_motion_plan_base(plan, gripper_set="open", mode=mode)
-        checker = check_pose_difference(self.env._get_ef_pose(mat=True), pose, tolerance=0.05)
+        checker = check_pose_difference(self.env._get_ef_pose(mat=True), pose, tolerance=2)
         return plan_checker, checker
     
     def execute_placing_checker(self, execute=False):

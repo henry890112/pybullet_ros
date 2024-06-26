@@ -39,6 +39,7 @@ add_message_files(
 add_service_files(
   FILES
   GraspGroup.srv
+  GetTargetMatrix.srv
 )
 
 generate_messages(
