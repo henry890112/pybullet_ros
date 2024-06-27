@@ -38,7 +38,7 @@ class PlacingNode:
         self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', True)
         self.target_place_name = None
         self.path_length = 20
-        self.renders = False
+        self.renders = True
 
     def initial(self):
         
@@ -346,9 +346,9 @@ class PlacingNode:
 
             # 第二次執行計劃並檢查
             if self.placing_stage == 1:
-                mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.45)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3.5)@ rotX(np.pi/4*3)
+                mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.5)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
             elif self.placing_stage == 2:
-                mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.65)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+                mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.85)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
             plan_checker, checker = self.execute_plan_with_check(mid_retract_pose, execute, mode='placing_mid', path_length=30)
             print("=====================================================")
             if self.visual_simulation:
@@ -373,7 +373,7 @@ class PlacingNode:
                     # 印出角度degree
                 print(np.degrees(np.arccos(np.dot(grasp_pose[:3, 2], np.array([1, 0, 0])))))
                 # 檢查grasp_pose的z軸是否和world的x軸小於30度, 若大於10度則continue
-                if np.degrees(np.arccos(np.dot(grasp_pose[:3, 2], np.array([1, 0, 0])))) > 15:
+                if np.degrees(np.arccos(np.dot(grasp_pose[:3, 2], np.array([1, 0, 0])))) > 20:
                     print("*****additional condition*****")
                     # 印出角度degree
                     print(np.degrees(np.arccos(np.dot(grasp_pose[:3, 2], np.array([1, 0, 0])))))

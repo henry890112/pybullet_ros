@@ -24,6 +24,7 @@ from sensor_msgs.point_cloud2 import create_cloud_xyz32
 from sensor_msgs import point_cloud2
 from geometry_msgs.msg import Pose, TransformStamped
 from utils.grasp_checker import ValidGraspChecker
+from utils.placement_utils import PointCloudProcessor
 
 from pybullet_ros.srv import GetTargetMatrix, GetTargetMatrixRequest
 from std_srvs.srv import Empty
@@ -60,7 +61,8 @@ class ros_node(object):
         self.mid_retract_pose = None
         self.envir_joint = [1.6208316641972509-np.pi/2, -0.98, 1.46939, -0.119555, 1.63676, -0.05]
         rospy.loginfo("Init finished")
-        self.use_cvae  = True
+        self.use_cvae  =   False
+        self.use_env_detect = False
 
 
     def joint_callback(self, msg):
@@ -157,19 +159,19 @@ class ros_node(object):
         if self.placing_stage == 1:
             place_pose_base = np.array([[-1, 0.,  0.,   0.7],
                                         [-0., -1,  0.,  0.0],
-                                        [ 0.,  0.,  1.,  0.05],
+                                        [ 0.,  0.,  1.,  0.25],
                                         [ 0. ,         0. ,         0.,          1.        ]]
                                         )
         elif self.placing_stage == 2:
             place_pose_base = np.array([[-1, 0.,  0.,   0.7],
                                         [-0., -1,  0.,  0.0],
-                                        [ 0.,  0.,  1.,  0.35],
+                                        [ 0.,  0.,  1.,  0.6],
                                         [ 0. ,         0. ,         0.,          1.        ]]
                                         )
         # 微調place pose
-        place_pose_base[0, 3] += -0.1
-        place_pose_base[1, 3] += self.placing_location[1]
-        place_pose_base[2, 3] += self.get_normal_translation() 
+        place_pose_base[0, 3] += 0
+        place_pose_base[1, 3] += 0
+        place_pose_base[2, 3] += self.get_normal_translation()
         # place_pose_base[2, 3] += self.target_center[2]
         print('z_translation = {}'.format(self.get_normal_translation()))
         return place_pose_base
@@ -182,7 +184,7 @@ class ros_node(object):
         obb = self.pc_segments_pcd.get_oriented_bounding_box()
         obb.color = (1, 0, 0) 
         # if self.vis_pcd:
-        o3d.visualization.draw_geometries([self.pc_segments_pcd, obb])
+        # o3d.visualization.draw_geometries([self.pc_segments_pcd, obb])
         return obb
 
 
@@ -207,12 +209,17 @@ class ros_node(object):
         return target_z_translation
     
     def get_env_callback(self, msg):
-        if msg.data == 0 or msg.data == 11:
-            self.placing_stage = 2 if msg.data == 0 else 1
+        if msg.data == 0 or msg.data == 11 or msg.data == 12 or msg.data == 13 or msg.data == 21 or msg.data == 22 or msg.data == 23:
+            
+            if msg.data in {0, 21, 22, 23}:
+                self.placing_stage = 2
+            else:
+                self.placing_stage = 1
+
             if self.placing_stage == 2:
-                self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.65)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+                self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.85)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
             elif self.placing_stage == 1:
-                self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.45)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+                self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.5)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
             
             # Reset the gripper
             self.control_gripper("reset")
@@ -228,10 +235,28 @@ class ros_node(object):
             self.actor.initial()
             self.actor.grasp_checker = ValidGraspChecker(self.actor.env)
 
+            # get env data
+            self.move_along_path([self.envir_joint])
+            if self.use_env_detect:
+                '''
+                在下面
+                '''
+
+            self.move_along_path(self.home_joint_point)
+
             # multi-view data
-            # self.get_multiview_data()
+            self.get_multiview_data()
+            obb = self.get_oriented_bounding_box()
+            print('z_translation = {}'.format(self.get_normal_translation()))
+            o3d.visualization.draw_geometries([self.pc_segments_pcd, obb])
+            print(f"self.multiview_pc_target_base: {self.multiview_pc_target_base}")
             print(f"self.obs_points: {self.obs_points}")
             print("***********Finish get multiview data*************\n")
+
+            # get the place pose (can change to other place pose)
+            # place_pose_base = self.actor.get_the_target_on_cabinet_pose()
+            # get it from apriltag_inform.py
+            place_pose_base = self.get_the_target_on_cabinet_pose()
 
             # step 1: get the stable plane (6d pose) on target object
             '''
@@ -251,19 +276,50 @@ class ros_node(object):
             target_pose_base[:3, 0] = np.array([0, 0, 1])
             target_pose_base[:3, 1] = np.array([-1, 0, 0])
             target_pose_base[:3, 2] = np.array([0, -1, 0])
-            # 手動旋轉x軸
-            target_pose_base = target_pose_base@ rotX(np.pi/4)
+
+            if msg.data == 21:
+                target_pose_base = target_pose_base@ rotX(np.pi/4)
+                target_pose_base = target_pose_base@ rotZ(-np.pi/2)
+                place_pose_base[1, 2] += 0
+                place_pose_base[2, 3] += 0.05
+
+            if msg.data == 22:
+                target_pose_base = target_pose_base@ rotX(-np.pi/4)
+                target_pose_base = target_pose_base@ rotZ(-np.pi/2)
+                place_pose_base[1, 2] += 0
+                place_pose_base[2, 3] += 0.05
+
+            if msg.data == 23:
+                target_pose_base = target_pose_base@ rotX(np.pi/4)
+                target_pose_base = target_pose_base@ rotZ(-np.pi/2)
+                place_pose_base[1, 2] += 0
+                place_pose_base[2, 3] += 0.05
+            
+            if msg.data == 11:
+                target_pose_base = target_pose_base@ rotX(np.pi/4)
+                target_pose_base = target_pose_base@ rotZ(-np.pi/2)
+                place_pose_base[1, 2] += 0
+                place_pose_base[2, 3] += 0.05
+
+            if msg.data == 12:
+                target_pose_base = target_pose_base@ rotX(-np.pi/4)
+                target_pose_base = target_pose_base@ rotZ(-np.pi/2)
+                place_pose_base[1, 2] += 0
+                place_pose_base[2, 3] += 0.05
+
+            if msg.data == 13:
+                target_pose_base = target_pose_base@ rotX(np.pi/4)
+                target_pose_base = target_pose_base@ rotZ(-np.pi/2)
+                place_pose_base[1, 2] += 0
+                place_pose_base[2, 3] += 0.05
             
             # TODO use cvae to get target 6d pose
             if self.use_cvae:
                 target_pose_base = self.target_matrix
-            print(target_pose_base)
 
-            # get the place pose (can change to other place pose)
-            # place_pose_base = self.actor.get_the_target_on_cabinet_pose()
-            # get it from apriltag_inform.py
-            place_pose_base = self.get_the_target_on_cabinet_pose()
-            print("***********Finish get target pose*************\n")
+            print("Place pose:", place_pose_base)
+            print("Target pose:", target_pose_base)
+            print("***********Finish get place/target pose*************\n")
 
             # step 2: get the contact grasp
             '''
@@ -426,6 +482,68 @@ class ros_node(object):
 
         elif msg.data == 4:
             self.move_along_path([self.envir_joint])
+
+            # Set init_value to None
+            self.target_points = None
+            self.obs_points = None
+            
+            # Segmentation part
+            seg_msg = Int32()
+            seg_msg.data = 2
+            self.seg_pub.publish(seg_msg)    
+            time.sleep(2) # Sleep to wait for the segmentation pointcloud arrive
+
+            print(f"self.obs_points: {self.obs_points}")
+
+            self.obs_points_base = self.pc_cam2base(self.obs_points)
+            self.target_points_base = self.pc_cam2base(self.target_points)
+
+            whole_point_cloud = np.concatenate([self.obs_points_base, self.target_points_base], axis=0)
+            point_cloud = o3d.geometry.PointCloud()
+            point_cloud.points = o3d.utility.Vector3dVector(whole_point_cloud)
+            
+            origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0, 0, 0])
+
+            # Define the parameters
+            voxel_size = 0.01  # Adjust based on your specific requirements
+            height_range = [0.59, 0.61]  # Minimum and maximum height to consider
+            plane_height_range = [0.59, 0.61]
+
+            # Create an instance of the PointCloudProcessor
+            processor = PointCloudProcessor(point_cloud, voxel_size, height_range, plane_height_range)
+
+            criterion, filtered_point_cloud, unit_vec = processor.whole_pipe_realworld(
+                min_ratio=0.05, threshold=0.02, iterations=2000, min_cluster=5000, max_cluster=70000, visualize=True
+            )
+
+            # empty_voxels_count, occupancy_grid, min_bound = processor.check_empty_voxels(filtered_point_cloud)
+            # voxel_grid = processor.visualize_voxels(occupancy_grid, min_bound)
+            # o3d.visualization.draw_geometries([voxel_grid])
+
+            unit_vec = [0, -1, 0]
+            sliced_point_clouds = processor.slice_point_cloud(filtered_point_cloud, unit_vec, slice_width=0.1, empty_threshold=0.25, display_voxels=True, check_slice_region=True)
+            geometries = []
+            for item in sliced_point_clouds:
+                if isinstance(item, tuple):
+                    sliced_pcd, voxel_grid = item
+                    geometries.append(sliced_pcd)
+                    geometries.append(voxel_grid)
+                else:
+                    geometries.append(item)
+            o3d.visualization.draw_geometries([*geometries, origin_frame])
+
+            print('===========================================================================')
+            sliced_point_clouds = processor.slice_point_cloud(filtered_point_cloud, unit_vec, slice_width=0.1, empty_threshold=0.25, display_voxels=True, check_slice_region=False)
+            geometries = []
+            for item in sliced_point_clouds:
+                if isinstance(item, tuple):
+                    sliced_pcd, voxel_grid = item
+                    geometries.append(sliced_pcd)
+                    geometries.append(voxel_grid)
+                else:
+                    geometries.append(item)
+            o3d.visualization.draw_geometries([*geometries, origin_frame])
+
 
         elif msg.data == 5:
             # step 7: move back 5cm

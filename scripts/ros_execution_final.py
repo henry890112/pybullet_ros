@@ -156,7 +156,7 @@ class ExecutionNode:
         file = os.path.join(self.parent_directory, "object_index", 'contact_plane_object.json')
         with open(file) as f:
             file_dir = json.load(f)
-        file_dir = file_dir['BBQSauce_1.0']
+        file_dir = file_dir['005_tomato_soup_can_1.0']
         file_dir = [f[:-5] for f in file_dir]
         test_file_dir = list(set(file_dir))
         self.env = SimulatedYCBEnv()
@@ -497,17 +497,49 @@ class ExecutionNode:
             self.target_pose_world = self.poseEstimate.get_6d_pose()
 
         print(self.target_pose_world)
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # test 005_tomato_soup_can_1.0
+        if self.target_placed_name == "005_tomato_soup_can_1.0":
+            # 當前self.target_pose_world[:3, 0]和[0, 0, 1]利用旋轉z軸的方式讓他們一樣
+            target_vector = self.target_pose_world[:3, 0]      
+            z_axis = np.array([0, 0, 1])
+            rotation_axis = np.cross(target_vector, z_axis)
+            cos_theta = np.dot(target_vector, z_axis) / (np.linalg.norm(target_vector) * np.linalg.norm(z_axis))
+            angle = np.arccos(np.clip(cos_theta, -1.0, 1.0))      
+            c = np.cos(angle)
+            s = np.sin(angle)
+            t = 1 - c
+            
+            x, y, z = rotation_axis / np.linalg.norm(rotation_axis)
+            
+            rotation_matrix = np.array([
+                [t*x*x + c,   t*x*y - s*z, t*x*z + s*y],
+                [t*x*y + s*z, t*y*y + c,   t*y*z - s*x],
+                [t*x*z - s*y, t*y*z + s*x, t*z*z + c]
+            ])
+            
+            # 應用旋轉矩陣
+            self.target_pose_world[:3, :3] = rotation_matrix @ self.target_pose_world[:3, :3]
+
+            # 依據此ratation matrix依據z軸旋轉特定角度
+            henry_angle = -90
+            henry_angle = henry_angle * np.pi / 180
+            rot_z = rotZ(henry_angle)
+            self.target_pose_world = self.target_pose_world @ rot_z
+
         if self.vis_draw_coordinate:
             # can see the target pose, cabinet pose and ef pose in pybullet
             self.env.draw_ef_coordinate(self.env._get_ef_pose(mat=True), 5)
             self.env.draw_ef_coordinate(self.env._get_target_urdf_pose(option = 'cabinet_world', mat = True), 5)
             self.env.draw_ef_coordinate(self.target_pose_world, 5)
 
+        
+
     def get_the_target_on_cabinet_pose(self):
         self.cabinet_pose_world = self.env._get_target_urdf_pose(option = 'cabinet_world', mat = True)
+        self.env.draw_ef_coordinate(self.cabinet_pose_world, 5)
         cabinet_pose_world_stage1 = self.cabinet_pose_world.copy()
         cabinet_pose_world_stage2 = self.cabinet_pose_world.copy()
-
         # # stage1 
         # cabinet_pose_world_stage1[0, 3] += 0.
         # cabinet_pose_world_stage1[1, 3] += -0.3
@@ -519,19 +551,21 @@ class ExecutionNode:
         # cabinet_pose_world_stage2[2, 3] += 0.4
 
         # stage1 
-        cabinet_pose_world_stage1[0, 3] += -0.35
+        cabinet_pose_world_stage1[0, 3] =0.7
         cabinet_pose_world_stage1[1, 3] += 0.
-        cabinet_pose_world_stage1[2, 3] += 0.3
+        cabinet_pose_world_stage1[2, 3] =0.25
 
         # stage2
-        cabinet_pose_world_stage2[0, 3] += -0.35
+        cabinet_pose_world_stage2[0, 3] =0.7
         cabinet_pose_world_stage2[1, 3] += 0.
-        cabinet_pose_world_stage2[2, 3] += 0.55
+        cabinet_pose_world_stage2[2, 3] =0.6
 
         # 利用self.placing_location來決定物體的放置位置y
         print('******************count_location = ', self.count_location)
         cabinet_pose_world_stage1[1, 3] += self.placing_location[self.count_location]
         cabinet_pose_world_stage2[1, 3] += self.placing_location[self.count_location]
+        print('******************cabinet_pose_world_stage1 = ', cabinet_pose_world_stage1)
+        print('******************cabinet_pose_world_stage2 = ', cabinet_pose_world_stage2)
         
             
 
@@ -590,9 +624,9 @@ class ExecutionNode:
         # set the poses of the robot
         self.final_grasp_pose_z_bias = adjust_pose_with_bias(self.final_grasp_pose, -0.1, option="ef")
         if self.placing_stage == 1:
-            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.45)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.50)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
         elif self.placing_stage == 2:
-            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.65)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
+            self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.85)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
 
         if self.placing_stage == 1:
             self.final_place_pose_z_bias_top = adjust_pose_with_bias(self.final_place_grasp_pose, 0.03, option="world")
