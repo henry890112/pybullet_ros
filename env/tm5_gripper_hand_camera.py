@@ -235,7 +235,13 @@ class TM5:
         
         threshold = -0.03  # 定義檢查碰撞的距離閾值
 
-        # 遍歷所有指定的連結對
+        # 定義額外的 bounding boxes，以 (xmin, xmax, ymin, ymax, zmin, zmax) 的形式
+        extra_bboxes = [
+            (0.68, 1.0, -0.5, 0.5, 0.57, 0.598),
+            (0.68, 1.0, -0.5, 0.5, 0.22, 0.248)
+        ]
+
+        # 检查 link 和 link 之间的碰撞
         for name_i in check_links:
             for name_j in check_links:
                 if (name_i, name_j) in exclude_pairs or (name_j, name_i) in exclude_pairs:
@@ -250,13 +256,34 @@ class TM5:
                 if closest_points:
                     # 如果發現任何連結對的最近點小於閾值，認為發生了碰撞
                     print(f"連結 {name_i} 和連結 {name_j} 的最近距離小於 {threshold} 米")
-                    # 印出碰撞的最近點距離
                     for point in closest_points:
                         print(f"最近點距離：{point[8]} 米")
-
                     return True
 
-        return False  # 如果所有指定連結對的最近點都不小於閾值，認為沒有碰撞
+        # 检查 link 和 extra bbox 之间的碰撞
+        for name in check_links:
+            link_id = link_ids[name]
+            link_state = p.getLinkState(self.robot, link_id)
+            link_pos = link_state[4]  # 获取链接的世界坐标位置
+            
+            # 遍历每一个额外的 bounding box
+            for bbox in extra_bboxes:
+                if self.is_point_in_bbox(link_pos, bbox):
+                    print(f"連結 {name} 與額外的 bounding box 發生碰撞")
+                    return True
+
+        return False
+
+    def is_point_in_bbox(self, point, bbox):
+        """
+        檢查點是否在包圍盒內
+        :param point: 點的座標 (x, y, z)
+        :param bbox: 包圍盒的範圍 (xmin, xmax, ymin, ymax, zmin, zmax)
+        :return: 如果點在包圍盒內則返回 True，否則返回 False
+        """
+        x, y, z = point
+        xmin, xmax, ymin, ymax, zmin, zmax = bbox
+        return xmin <= x <= xmax and ymin <= y <= ymax and zmin <= z <= zmax
 
 
 

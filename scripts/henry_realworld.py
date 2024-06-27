@@ -221,13 +221,13 @@ class ros_node(object):
             elif self.placing_stage == 1:
                 self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.5)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)
             
-            # Reset the gripper
-            self.control_gripper("reset")
-            time.sleep(1)
-            self.control_gripper("set_pose", 0.)
-            time.sleep(1)
-            self.control_gripper("set_pose", 0.085)
-            print(f"finish grasping")
+            # # Reset the gripper
+            # self.control_gripper("reset")
+            # time.sleep(1)
+            # self.control_gripper("set_pose", 0.)
+            # time.sleep(1)
+            # self.control_gripper("set_pose", 0.085)
+            # print(f"finish grasping")
 
             # Pybullet setup
             self.actor.load_environment()
@@ -237,6 +237,7 @@ class ros_node(object):
 
             # get env data
             self.move_along_path([self.envir_joint])
+            time.sleep(2)
             if self.use_env_detect:
                 '''
                 在下面
@@ -375,10 +376,10 @@ class ros_node(object):
             print("***********Finish grasp poses filtered*************\n")
 
             # step 5: move to the grasp pose
-            self.move_along_path(success_joint_grasp_list)
+            self.move_along_path_vel(success_joint_grasp_list)
             ef_pose = self.get_ef_pose()
             forward_mat = np.eye(4)
-            forward_mat[2, 3] = 0.1
+            forward_mat[2, 3] = 0.05
             ef_pose = ef_pose.dot(forward_mat)
             quat_pose = pack_pose(ef_pose)
             final_grasp_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
@@ -392,26 +393,19 @@ class ros_node(object):
 
             # step 6: move to the place pose
             # 可以微調place pose!!!!
-            self.move_along_path(success_joint_mid_list)
-            self.move_along_path(success_joint_place_list)
+            self.move_along_path_vel(success_joint_mid_list)
+            self.move_along_path_vel(success_joint_place_list)
+
+            # 往下輕放物體
             ef_pose = self.get_ef_pose()
             forward_mat = np.eye(4)
-            forward_mat[2, 3] = 0.
-            ef_pose = forward_mat.dot(ef_pose)
+            forward_mat[2, 3] = -0.03
+            ef_pose = ef_pose.dot(forward_mat)
             quat_pose = pack_pose(ef_pose)
             final_place_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
             self.set_pose(final_place_pose[0], final_place_pose[1])
             time.sleep(2)
-            # if self.placing_stage == 1:
-            #     # step 6.5: move forward 5cm
-            #     ef_pose = self.get_ef_pose()
-            #     forward_mat = np.eye(4)
-            #     forward_mat[2, 3] += 0.05
-            #     ef_pose = forward_mat.dot(ef_pose)
-            #     quat_pose = pack_pose(ef_pose)
-            #     final_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
-            #     self.set_pose(final_pose[0], final_pose[1])
-            # Open gripper
+
             self.control_gripper("set_pose", 0.085)
             print(f"***********Finish robot placing***********\n")
             time.sleep(1)
@@ -870,7 +864,18 @@ class ros_node(object):
         print("Move tm joints to position: {}".format(target_joint.position))
         self.tm_joint_pub.publish(target_joint)
         return self.loop_confirm(mode="joint")
-
+    
+    def set_joint_vel(self, joint_position, velocity):
+        """
+        Send goal joint and goal velocity to ruckig to move
+        """
+        target_joint = JointState()
+        target_joint.position = joint_position
+        target_joint.velocity = velocity
+        self.joint_goal = np.concatenate((joint_position, [0, 0, 0]))
+        print("Move tm joints to position: {}".format(target_joint.position))
+        self.tm_joint_pub.publish(target_joint)
+        return self.loop_confirm(mode="joint")
 
     def set_pose(self, pos, orn):
         """
@@ -929,6 +934,23 @@ class ros_node(object):
     def move_along_path(self, path):
         for waypoint in path:
             self.set_joint(waypoint)
+            self.loop_confirm()
+    
+    def move_along_path_vel(self, path):
+        # First calculate the velocity
+        joint_velocities = []
+        delta_t = 10
+        # Loop through waypoints to compute velocities
+        for i in range(len(path) - 1):
+            # Difference between consecutive waypoints
+            delta_q = path[i+1] - path[i]
+            
+            # Compute the time interval needed for the max velocity constraint
+            velocities = delta_q / delta_t
+            joint_velocities.append(velocities)
+        joint_velocities.append([0, 0, 0, 0, 0, 0])
+        for waypoint, velocity in zip(path, joint_velocities):
+            self.set_joint_vel(waypoint, velocity)
             self.loop_confirm()
 
     def control_gripper(self, type, value=0):

@@ -68,6 +68,8 @@ class ValidGraspChecker():
 
         min_point = target_box[0]
         max_point = target_box[1]
+        print("***min_point***", min_point)
+        print("***max_point***", max_point)
 
         if target_id == self.env.cabinet_id:
             # 增加z軸高度

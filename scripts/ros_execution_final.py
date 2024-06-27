@@ -551,12 +551,12 @@ class ExecutionNode:
         # cabinet_pose_world_stage2[2, 3] += 0.4
 
         # stage1 
-        cabinet_pose_world_stage1[0, 3] =0.7
+        cabinet_pose_world_stage1[0, 3] =0.75
         cabinet_pose_world_stage1[1, 3] += 0.
         cabinet_pose_world_stage1[2, 3] =0.25
 
         # stage2
-        cabinet_pose_world_stage2[0, 3] =0.7
+        cabinet_pose_world_stage2[0, 3] =0.75
         cabinet_pose_world_stage2[1, 3] += 0.
         cabinet_pose_world_stage2[2, 3] =0.6
 

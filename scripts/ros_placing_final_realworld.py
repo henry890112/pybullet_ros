@@ -517,7 +517,7 @@ class PlacingNode:
             final_grasp_pose = target_pose_world @ relative_grasp_transform
             
             # 第一次執行計劃並檢查
-            pose_z_bias = adjust_pose_with_bias(final_grasp_pose, -0.1)
+            pose_z_bias = adjust_pose_with_bias(final_grasp_pose, -0.05)
             plan_checker, checker = self.execute_plan_with_check_base(pose_z_bias, execute, mode='grasping')
             count += 1
             print(f"第 {count} / {len(self.grasp_index)} 個夾取姿態。")
@@ -562,7 +562,7 @@ class PlacingNode:
                 continue
                 
             # 第三次執行計劃並檢查
-            pose_z_bias = adjust_pose_with_bias(grasp_pose, 0.1)
+            pose_z_bias = adjust_pose_with_bias(grasp_pose, 0.)
             plan_checker, checker = self.execute_plan_with_check_base(pose_z_bias, execute, mode='placing')
             print("=====================================================")
 

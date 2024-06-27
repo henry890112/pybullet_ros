@@ -384,7 +384,7 @@ class PlacingNode:
 
             if not plan_checker or not checker:
                 count_in_3 += 1
-                time.sleep(3)
+                time.sleep(1)
                 if self.visual_simulation:
                     time.sleep(3)
                 if not plan_checker and not checker:
