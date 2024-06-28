@@ -274,10 +274,10 @@ class SimulatedYCBEnv():
 
         # Intialize robot and objects
         if init_joints is None:
-            self._panda = TM5(stepsize=self._timeStep, base_shift=self._shift)
+            self._panda = TM5(stepsize=self._timeStep, base_shift=self._shift, other_object = self.cabinet_id)
 
         else:
-            self._panda = TM5(stepsize=self._timeStep, init_joints=init_joints, base_shift=self._shift)
+            self._panda = TM5(stepsize=self._timeStep, init_joints=init_joints, base_shift=self._shift, other_object = self.cabinet_id)
             for _ in range(1000):
                 p.stepSimulation()
 

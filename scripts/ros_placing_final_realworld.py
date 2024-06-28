@@ -37,7 +37,7 @@ class PlacingNode:
         self.visual_simulation = rospy.get_param('~visual_simulation', False)
         self.vis_draw_coordinate = rospy.get_param('~vis_draw_coordinate', False)
         self.target_place_name = None
-        self.path_length = 20
+        self.path_length = 10
         self.renders = renders
 
     def initial(self):
@@ -471,28 +471,12 @@ class PlacingNode:
                 continue
 
             end_time = time.time()
-            # save in the txt file
-            with open(os.path.join(self.parent_directory, 'results', 'ros_placing_final.txt'), 'a') as f:
-                f.write(f"target_place_name: {self.target_place_name}\n")
-                f.write(f"第 {count} / {len(self.grasp_index)} 個有效的夾取姿態。\n")
-                f.write(f"第一次失敗次數：{count_in_1}, collision: {count_in_1_collision}, checker: {count_in_1_checker}\n")
-                f.write(f"第二次失敗次數：{count_in_2}, collision: {count_in_2_collision}, checker: {count_in_2_checker}\n")
-                f.write(f"第三次失敗次數：{count_in_3}, collision: {count_in_3_collision}, checker: {count_in_3_checker}\n")
-                f.write(f"!!!!!!!!!!!!!!!Time elapsed: {end_time - start_time} seconds!!!!!!!!!!!!!!!!!!!!!!!!\n")
-                f.write("=====================================================\n")
+            
             
             self.grasp_pose_checker(time=5, grasp_poses=np.expand_dims(grasp_pose, axis=0), only_vis_grasp=True)
             return grasp_pose
         # if all grasp pose failed return np.eye(4)
         if len(self.grasp_index) == 0:
-            with open(os.path.join(self.parent_directory, 'results', 'ros_placing_final.txt'), 'a') as f:
-                f.write(f"target_place_name: {self.target_place_name}\n")
-                f.write(f"第 {count} / {len(self.grasp_index)} 個有效的夾取姿態。\n")
-                f.write(f"第一次失敗次數：{count_in_1}, collision: {count_in_1_collision}, checker: {count_in_1_checker}\n")
-                f.write(f"第二次失敗次數：{count_in_2}, collision: {count_in_2_collision}, checker: {count_in_2_checker}\n")
-                f.write(f"第三次失敗次數：{count_in_3}, collision: {count_in_3_collision}, checker: {count_in_3_checker}\n")
-                f.write(f"!!!!!!!!!!!!!!!Time elapsed:NO GRASP POSE IN CONTACT GRASPNET!!!!!!!!!!!!!!!!!!!!!!!!\n")
-                f.write("=====================================================\n")
             return np.eye(4)
         return np.eye(4)
     
@@ -584,16 +568,7 @@ class PlacingNode:
                 continue
 
             end_time = time.time()
-            # save in the txt file
-            with open(os.path.join(self.parent_directory, 'results', 'ros_placing_final.txt'), 'a') as f:
-                f.write(f"target_place_name: {self.target_place_name}\n")
-                f.write(f"第 {count} / {len(self.grasp_index)} 個有效的夾取姿態。\n")
-                f.write(f"第一次失敗次數：{count_in_1}, collision: {count_in_1_collision}, checker: {count_in_1_checker}\n")
-                f.write(f"第二次失敗次數：{count_in_2}, collision: {count_in_2_collision}, checker: {count_in_2_checker}\n")
-                f.write(f"第三次失敗次數：{count_in_3}, collision: {count_in_3_collision}, checker: {count_in_3_checker}\n")
-                f.write(f"!!!!!!!!!!!!!!!Time elapsed: {end_time - start_time} seconds!!!!!!!!!!!!!!!!!!!!!!!!\n")
-                f.write("=====================================================\n")
-            
+            print("Time elapsed:", end_time - start_time)
             print("grasp_pose = ", grasp_pose)
             print("\nsuccess_joint_grasp_list = ", self.success_joint_grasp_list)
             print("\nsuccess_joint_mid_list = ", self.success_joint_mid_list)
@@ -602,14 +577,9 @@ class PlacingNode:
         
         # if all grasp pose failed return np.eye(4)
         if len(self.grasp_index) == 0:
-            with open(os.path.join(self.parent_directory, 'results', 'ros_placing_final.txt'), 'a') as f:
-                f.write(f"target_place_name: {self.target_place_name}\n")
-                f.write(f"第 {count} / {len(self.grasp_index)} 個有效的夾取姿態。\n")
-                f.write(f"第一次失敗次數：{count_in_1}, collision: {count_in_1_collision}, checker: {count_in_1_checker}\n")
-                f.write(f"第二次失敗次數：{count_in_2}, collision: {count_in_2_collision}, checker: {count_in_2_checker}\n")
-                f.write(f"第三次失敗次數：{count_in_3}, collision: {count_in_3_collision}, checker: {count_in_3_checker}\n")
-                f.write(f"!!!!!!!!!!!!!!!Time elapsed:NO GRASP POSE IN CONTACT GRASPNET!!!!!!!!!!!!!!!!!!!!!!!!\n")
-                f.write("=====================================================\n")
+
+            print(f"!!!!!!!!!!!!!!!Time elapsed:NO GRASP POSE IN CONTACT GRASPNET!!!!!!!!!!!!!!!!!!!!!!!!\n")
+            print("=====================================================\n")
             return np.eye(4)
         return np.eye(4)
 

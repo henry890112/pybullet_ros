@@ -10,7 +10,7 @@ import math
 
 
 class TM5:
-    def __init__(self, stepsize=1e-3, realtime=0, init_joints=None, base_shift=[0, 0, 0]):
+    def __init__(self, stepsize=1e-3, realtime=0, init_joints=None, base_shift=[0, 0, 0], other_object=None):
         self.t = 0.0
         self.stepsize = stepsize
         self.realtime = realtime
@@ -107,6 +107,7 @@ class TM5:
         #                                 baseVisualShapeIndex=visualShapeId,
         #                                 basePosition=collisionBoxPosition,
         #                                 baseOrientation=collisionBoxOrientation)
+        self.cabinet = other_object
 
     def reset(self, joints=None):
         self.t = 0.0
@@ -233,7 +234,8 @@ class TM5:
             ("wrist_3_link", "flange_link"),
         }
         
-        threshold = -0.03  # 定義檢查碰撞的距離閾值
+        threshold = -0.0  # 定義檢查碰撞的距離閾值
+        cabinet_threshold = 0.0  # 定義檢查與 cabinet 碰撞的距離閾值
 
         # 定義額外的 bounding boxes，以 (xmin, xmax, ymin, ymax, zmin, zmax) 的形式
         extra_bboxes = [
@@ -260,18 +262,22 @@ class TM5:
                         print(f"最近點距離：{point[8]} 米")
                     return True
 
-        # 检查 link 和 extra bbox 之间的碰撞
+        # 與 cabinet 進行碰撞檢查
         for name in check_links:
             link_id = link_ids[name]
-            link_state = p.getLinkState(self.robot, link_id)
-            link_pos = link_state[4]  # 获取链接的世界坐标位置
             
-            # 遍历每一个额外的 bounding box
-            for bbox in extra_bboxes:
-                if self.is_point_in_bbox(link_pos, bbox):
-                    print(f"連結 {name} 與額外的 bounding box 發生碰撞")
+            # 定义需要检查的 cabinet 的 link index 列表
+            cabinet_link_indices = [2, 3]
+            
+            for cabinet_link_id in cabinet_link_indices:
+                closest_points = p.getClosestPoints(bodyA=self.robot, bodyB=self.cabinet, distance=cabinet_threshold, linkIndexA=link_id, linkIndexB=cabinet_link_id)
+                if closest_points:
+                    # 如果發現與 cabinet 的最近點小於閾值，認為發生了碰撞
+                    print(f"連結 {name} 和 cabinet 的 link {cabinet_link_id} 的最近距離小於 {cabinet_threshold} 米")
+                    # 印出碰撞的最近點距離
+                    for point in closest_points:
+                        print(f"最近點距離：{point[8]} 米")
                     return True
-
         return False
 
     def is_point_in_bbox(self, point, bbox):

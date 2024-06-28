@@ -45,7 +45,7 @@ class ExecutionNode:
         self.count_location = 0
         self.placing_location = [0.2, 0, -0.2]
         # stage2 是最上面的貨價
-        self.placing_stage = 2
+        self.placing_stage = 1
 
 
     def initial(self):
@@ -522,7 +522,7 @@ class ExecutionNode:
             self.target_pose_world[:3, :3] = rotation_matrix @ self.target_pose_world[:3, :3]
 
             # 依據此ratation matrix依據z軸旋轉特定角度
-            henry_angle = -90
+            henry_angle = -0
             henry_angle = henry_angle * np.pi / 180
             rot_z = rotZ(henry_angle)
             self.target_pose_world = self.target_pose_world @ rot_z
