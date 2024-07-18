@@ -234,7 +234,7 @@ class TM5:
             ("wrist_3_link", "flange_link"),
         }
         
-        threshold = -0.0  # 定義檢查碰撞的距離閾值
+        threshold = -0.03  # 定義檢查碰撞的距離閾值
         cabinet_threshold = 0.0  # 定義檢查與 cabinet 碰撞的距離閾值
 
         # 定義額外的 bounding boxes，以 (xmin, xmax, ymin, ymax, zmin, zmax) 的形式
