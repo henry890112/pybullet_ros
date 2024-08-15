@@ -6,6 +6,17 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from utils import transform_util
+# 獲得點雲加的
+import rospy
+import open3d as o3d
+from sensor_msgs.msg import PointCloud2, Image
+import sensor_msgs.point_cloud2 as pc2
+import numpy as np
+import struct
+import tf
+import cv2
+import cv_bridge
+
 
 
 def create_arrow(vec, color, vis=None, vec_len=None, scale=.06, radius=.12, position=(0,0,0),
@@ -503,7 +514,7 @@ class PointCloudProcessor:
         # step1: get the point cloud from .pcd file
         environment_pcd = self.point_cloud
         print("Original point cloud", np.asarray(environment_pcd.points).shape)
-        environment_pcd = environment_pcd.voxel_down_sample(voxel_size=0.005)
+        environment_pcd = environment_pcd.voxel_down_sample(voxel_size=0.008)
         print("Downsampled point cloud", np.asarray(environment_pcd.points).shape)
         origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0, 0, 0])
 
@@ -636,3 +647,16 @@ class PointCloudProcessor:
         return sliced_point_clouds
 
 
+class PointCloudTransformer:
+    def __init__(self):
+        self.listener = tf.TransformListener()
+
+    def transform_pointcloud(self, cloud_in, from_frame, to_frame):
+        # 確保轉換可用
+        self.listener.waitForTransform(from_frame, to_frame, rospy.Time(0), rospy.Duration(4.0))
+        
+        # 轉換點雲
+        cloud_out = self.listener.transformPointCloud(to_frame, cloud_in)
+        
+        return cloud_out
+    
