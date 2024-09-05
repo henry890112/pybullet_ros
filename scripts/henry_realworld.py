@@ -380,19 +380,23 @@ class ros_node(object):
                 target_pose_base[:3, 2] = np.array([0, -1, 0])
 
             if self.parallel_or_not == 1:
+                # parral
                 target_pose_base = target_pose_base @ rotX(self.angle_rad)
                 target_pose_base = target_pose_base@ rotZ(0)
                 place_pose_base[1, 3] += 0
                 place_pose_base[2, 3] += 0.03
             elif self.parallel_or_not == 2:
+                # pack
                 target_pose_base = target_pose_base@ rotZ(self.angle_rad)
                 place_pose_base[1, 3] += 0
                 place_pose_base[2, 3] += 0.07
             elif self.parallel_or_not == 3:
+                # pile1
                 target_pose_base = target_pose_base@ rotX(self.deg2rad(90))@ rotY(self.angle_rad)
                 place_pose_base[1, 3] += 0
                 place_pose_base[2, 3] += 0.03
             elif self.parallel_or_not == 4:
+                # pile2
                 target_pose_base = target_pose_base@ rotX(self.deg2rad(45))@ rotY(self.angle_rad)
                 place_pose_base[1, 3] += 0
                 place_pose_base[2, 3] += 0.03
@@ -862,12 +866,14 @@ class ros_node(object):
             # plane_height_range = [0.59, 0.61]
 
             ######################################
-            height_range = [0.60, 0.64]  # Minimum and maximum height to consider
-            plane_height_range = [0.60, 0.64]
-            # height_range = [0.20, 0.24]  # Minimum and maximum height to consider
-            # plane_height_range = [0.20, 0.24]
             slice_width = 0.305
-            empth_threshold = 0.15
+
+            # height_range = [0.60, 0.65]  # Minimum and maximum height to consider
+            # plane_height_range = [0.60, 0.65]
+            # empth_threshold = 0.2
+            height_range = [0.20, 0.25]  # Minimum and maximum height to consider
+            plane_height_range = [0.20, 0.25]
+            empth_threshold = 0.2
 
             # Create an instance of the PointCloudProcessor
             processor = PointCloudProcessor(point_cloud, voxel_size, height_range, plane_height_range)
@@ -887,7 +893,7 @@ class ros_node(object):
                 if isinstance(item, tuple):
                     sliced_pcd, voxel_grid = item
                     geometries.append(sliced_pcd)
-                    geometries.append(voxel_grid)
+                    # geometries.append(voxel_grid)
                 else:
                     geometries.append(item)
             o3d.visualization.draw_geometries([*geometries, origin_frame])
@@ -899,7 +905,7 @@ class ros_node(object):
                 if isinstance(item, tuple):
                     sliced_pcd, voxel_grid = item
                     geometries.append(sliced_pcd)
-                    geometries.append(voxel_grid)
+                    # geometries.append(voxel_grid)
                 else:
                     geometries.append(item)
             o3d.visualization.draw_geometries([*geometries, origin_frame])
@@ -1065,10 +1071,23 @@ class ros_node(object):
             self.get_multiview_data(single_view = True, reset_pc = True)
             obb = self.get_oriented_bounding_box()
             print('z_translation = {}'.format(self.get_normal_translation()))
-            o3d.visualization.draw_geometries([self.pc_segments_pcd, obb])
+            o3d.visualization.draw_geometries([self.pc_segments_pcd])
             print(f"self.multiview_pc_target_base: {self.multiview_pc_target_base}")
             print(f"self.obs_points: {self.obs_points}")
             print("***********Finish get multiview data*************\n")
+
+        elif msg.data == 98:
+            # get multiview pcd and save it 2024905
+            self.move_along_path(self.home_joint_point)
+            self.get_multiview_data(single_view = False, reset_pc = False)
+            print('***********', self.multiview_pc_target_base.shape)
+            file_name = "/home/user/henry_pybullet_ws/src/pybullet_ros/scripts/target_pcd/target_pcd.pcd"
+            self.visual_pc(self.multiview_pc_target_base, save_pcd = True, file_name = file_name)
+            print("***********Finish get & save multiview data*************\n")
+        elif msg.data == 97:
+            file_name = "/home/user/henry_pybullet_ws/src/pybullet_ros/scripts/target_pcd/target_pcd.pcd"
+            self.load_and_visualize_pcd(file_name, voxel_size = 0.005)
+
 
 
     def points_callback(self, msg):
@@ -1145,11 +1164,31 @@ class ros_node(object):
         return np.dot(T, poses)
 
 
-    def visual_pc(self, pc):
+    def visual_pc(self, pc, save_pcd = False, file_name=None):
         o3d_pc = o3d.geometry.PointCloud()
         o3d_pc.points = o3d.utility.Vector3dVector(pc)
+        o3d_pc.colors = o3d.utility.Vector3dVector(np.zeros_like(pc))
         axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
         o3d.visualization.draw_geometries([o3d_pc, axes])
+        if save_pcd == True:
+            o3d.io.write_point_cloud(file_name, o3d_pc)
+    
+    def load_and_visualize_pcd(self, file_name, voxel_size=0.05):
+        # Read the .pcd file
+        pcd = o3d.io.read_point_cloud(file_name)
+        
+        # Apply voxel downsampling
+        downsampled_pcd = pcd.voxel_down_sample(voxel_size=voxel_size)
+        
+        # Create coordinate frame axes for reference
+        axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+        
+        # Visualize the downsampled point cloud and axes
+        o3d.visualization.draw_geometries([downsampled_pcd, axes])
+        print(f"Loaded and visualized voxel-downsampled point cloud from {file_name} with voxel size {voxel_size}")
+
+
+
 
     def create_grasp_geometry(self, grasp_pose, color=[0, 0, 0], length=0.08, width=0.08):
         """Create a geometry representing a grasp pose as a U shape."""
@@ -1459,7 +1498,7 @@ class ros_node(object):
         except rospy.ServiceException as e:
             rospy.logwarn("Service call failed: %s" % e) 
     
-    def emv_callback(self, data):
+    def env_callback(self, data):
         # 轉換 PointCloud2 到 Open3D 的點雲格式
         points = np.array(list(pc2.read_points(data, field_names=("x", "y", "z"), skip_nans=True)))
         cloud = o3d.geometry.PointCloud()
@@ -1513,5 +1552,5 @@ class ros_node(object):
 
 if __name__ == "__main__":
     rospy.init_node("test_realworld")
-    real_actor_node = ros_node(renders=False)
+    real_actor_node = ros_node(renders=True)
     rospy.spin()
