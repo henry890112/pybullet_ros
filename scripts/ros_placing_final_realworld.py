@@ -385,6 +385,33 @@ class PlacingNode:
             if dot_with_z_axis > 0:
                 self.grasp_index = np.delete(self.grasp_index, np.where(self.grasp_index == i))
     
+    def refine_grasp_place_pose_base_in_target_pose_newnew(self, scores):
+        '''
+        將 gras pose 的 z 和 [1, 0, 0] 做內積大於 45 度就將此 grasp_pose 的 grasp index 移除，
+        並且與 [0, 0, 1] 的內積 > 0 的姿態則去除，< 0 的姿態則留下。
+        '''
+        self.grasp_index = np.array(self.grasp_index)
+        if len(self.grasp_index) == 0:
+            return
+        scores_array = np.array(scores)
+
+        self.grasp_index = self.grasp_index[np.argsort(-scores_array[self.grasp_index])]
+
+        print("grasp_index = ", self.grasp_index)
+        for i in self.grasp_index:
+            self.grasp_pose = self.grasp_list[i]
+
+            # 檢查與[1, 0, 0]的夾角是否大於15度，若大於15度，則移除此抓取索引
+            angle_with_x_axis = np.arccos(np.dot(self.grasp_pose[:3, 2], np.array([0.9659, 0.2588, 0])) / 
+                                        (np.linalg.norm(self.grasp_pose[:3, 2]) * np.linalg.norm(np.array([1, 0, 0]))))
+            if np.degrees(angle_with_x_axis) > 45:
+                self.grasp_index = np.delete(self.grasp_index, np.where(self.grasp_index == i))
+            
+            # 檢查與 [0, 0, 1] 的內積是否大於 0，若大於 0，則移除此抓取索引
+            dot_with_z_axis = np.dot(self.grasp_pose[:3, 2], np.array([0.9659, 0.2588, 0]))
+            if dot_with_z_axis > 0:
+                self.grasp_index = np.delete(self.grasp_index, np.where(self.grasp_index == i))
+
     def refine_grasp_place_pose_base_in_target_pose_stage1(self, scores, target_center):
         """
         Refines grasp poses based on their alignment with the x-axis and their proximity to the target center.
@@ -411,14 +438,14 @@ class PlacingNode:
             self.grasp_pose = self.grasp_list[i]
             
             # Calculate the angle between the grasp pose's z-axis and the x-axis [1, 0, 0]
-            angle_with_x_axis = np.arccos(np.dot(self.grasp_pose[:3, 2], np.array([1, 0, 0])) / 
+            angle_with_x_axis = np.arccos(np.dot(self.grasp_pose[:3, 2], np.array([0.9659, 0.2588, 0])) / 
                                         (np.linalg.norm(self.grasp_pose[:3, 2]) * np.linalg.norm(np.array([1, 0, 0]))))
             
             # Convert the angle from radians to degrees
             angle_degrees = np.degrees(angle_with_x_axis)
             
             # Keep the grasp index if the angle is less than or equal to 3 degrees
-            if angle_degrees <= 5:
+            if angle_degrees <= 10:
                 valid_grasp_indices.append(i)
         
         # Convert valid_grasp_indices to a numpy array
@@ -501,7 +528,62 @@ class PlacingNode:
 
         print("Refined grasp_index based on proximity to target_center = ", self.grasp_index)
             
+    def refine_grasp_place_pose_base_in_target_pose_stage2_newnew(self, scores, target_center):
+        """
+        Refines grasp poses based on their alignment with the x-axis and their proximity to the target center.
+        Removes grasp poses where the angle between the grasp pose's z-axis and [1, 0, 0] is greater than 3 degrees.
+        """
+        # Ensure grasp_index is a numpy array
+        self.grasp_index = np.array(self.grasp_index)
+        
+        # Return if there are no grasp indices to process
+        if len(self.grasp_index) == 0:
+            return
+        
+        # Convert scores to a numpy array
+        scores_array = np.array(scores)
+        
+        # Sort grasp_index based on the scores in descending order
+        self.grasp_index = self.grasp_index[np.argsort(-scores_array[self.grasp_index])]
+        
+        print("Initial sorted grasp_index based on scores = ", self.grasp_index)
+        
+        # Filter out grasps with an angle greater than 3 degrees with the x-axis
+        valid_grasp_indices = []
+        for i in self.grasp_index:
+            self.grasp_pose = self.grasp_list[i]
+            
+            # Calculate the angle between the grasp pose's z-axis and the x-axis [1, 0, 0]
+            angle_with_x_axis = np.arccos(np.dot(self.grasp_pose[:3, 2], np.array([0.9659, 0.2588, 0])) / 
+                                        (np.linalg.norm(self.grasp_pose[:3, 2]) * np.linalg.norm(np.array([1, 0, 0]))))
+            
+            # Convert the angle from radians to degrees
+            angle_degrees = np.degrees(angle_with_x_axis)
+            
+            # Keep the grasp index if the angle is less than or equal to 3 degrees
+            if angle_degrees <= 30:
+                valid_grasp_indices.append(i)
+        
+        # Convert valid_grasp_indices to a numpy array
+        valid_grasp_indices = np.array(valid_grasp_indices)
+        
+        # If no valid grasps, return
+        if len(valid_grasp_indices) == 0:
+            self.grasp_index = valid_grasp_indices
+            return
+        
+        # Sort the valid grasps based on the distance to target_center
+        distances = []
+        for i in valid_grasp_indices:
+            grasp_position = self.grasp_list[i][:3, 3]
+            distance_to_target = np.linalg.norm(grasp_position - target_center)
+            distances.append(distance_to_target)
+        
+        distances = np.array(distances)
+        sorted_indices = np.argsort(distances)
+        self.grasp_index = valid_grasp_indices[sorted_indices]
 
+        print("Refined grasp_index based on proximity to target_center = ", self.grasp_index)
 
     def execute_plan_with_check(self, pose, execute=False):
         if self.vis_draw_coordinate:

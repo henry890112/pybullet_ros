@@ -260,14 +260,14 @@ class ros_node(object):
         if str(self.placing_stage)[0] == '1':
             place_pose_base = np.array([[-1, 0.,  0.,   0.8],
                                         [-0., -1,  0.,  0.0],
-                                        [ 0.,  0.,  1.,  0.2],
+                                        [ 0.,  0.,  1.,  0.18],
                                         [ 0. ,         0. ,         0.,          1.        ]]
                                         )
         elif str(self.placing_stage)[0] == '2':
             print()
             place_pose_base = np.array([[-1, 0.,  0.,   0.8],
                                         [-0., -1,  0.,  0.0],
-                                        [ 0.,  0.,  1.,  0.6],
+                                        [ 0.,  0.,  1.,  0.62],
                                         [ 0. ,         0. ,         0.,          1.        ]]
                                         )
         # 微調place pose
@@ -400,6 +400,7 @@ class ros_node(object):
                 target_pose_base = target_pose_base@ rotX(self.deg2rad(45))@ rotY(self.angle_rad)
                 place_pose_base[1, 3] += 0
                 place_pose_base[2, 3] += 0.03
+            
             
             self.actor.env.draw_ef_coordinate(place_pose_base, 0)
             self.actor.env.draw_ef_coordinate(target_pose_base, 0)
@@ -866,14 +867,14 @@ class ros_node(object):
             # plane_height_range = [0.59, 0.61]
 
             ######################################
-            slice_width = 0.305
+            slice_width = 0.308
 
-            # height_range = [0.60, 0.65]  # Minimum and maximum height to consider
-            # plane_height_range = [0.60, 0.65]
+            height_range = [0.60, 0.65]  # Minimum and maximum height to consider
+            plane_height_range = [0.60, 0.65]
+            empth_threshold = 0.155
+            # height_range = [0.20, 0.25]  # Minimum and maximum height to consider
+            # plane_height_range = [0.20, 0.25]
             # empth_threshold = 0.2
-            height_range = [0.20, 0.25]  # Minimum and maximum height to consider
-            plane_height_range = [0.20, 0.25]
-            empth_threshold = 0.2
 
             # Create an instance of the PointCloudProcessor
             processor = PointCloudProcessor(point_cloud, voxel_size, height_range, plane_height_range)
@@ -1047,7 +1048,7 @@ class ros_node(object):
                 self.shutdown_bandu_server()
 
         elif msg.data == 9:
-            
+
             # get env data
             self.move_along_path(self.envir_joint)
             time.sleep(2)
@@ -1061,6 +1062,8 @@ class ros_node(object):
             print(f"self.multiview_pc_target_base: {self.multiview_pc_target_base}")
             print(f"self.obs_points: {self.obs_points}")
             print("***********Finish get multiview data*************\n")
+
+
         elif msg.data == 99:
             # get env data
             # self.move_along_path(self.envir_joint)
@@ -1085,8 +1088,332 @@ class ros_node(object):
             self.visual_pc(self.multiview_pc_target_base, save_pcd = True, file_name = file_name)
             print("***********Finish get & save multiview data*************\n")
         elif msg.data == 97:
-            file_name = "/home/user/henry_pybullet_ws/src/pybullet_ros/scripts/target_pcd/target_pcd.pcd"
-            self.load_and_visualize_pcd(file_name, voxel_size = 0.005)
+            # 20241114加入
+            self.points_sub = rospy.Subscriber("/uoais/Pointclouds", PointCloud2, self.points_callback)
+            self.obs_points_sub = rospy.Subscriber("/uoais/obs_pc", PointCloud2, self.obs_points_callback)
+            self.seg_pub = rospy.Publisher("/uoais/data_init", Int32, queue_size=1)
+
+            # Set init_value to None
+            self.target_points = None
+            self.obs_points = None
+            
+            # Segmentation part
+            seg_msg = Int32()
+            seg_msg.data = 2
+            self.seg_pub.publish(seg_msg)   
+            while(self.target_points is None):
+                print(f"wait for segmentation")
+                time.sleep(0.1) # Sleep to wait for the segmentation pointcloud arrive 
+            
+
+            print(f"self.obs_points: {self.obs_points}")
+            print("***********Init UOAIS*************\n")
+            
+            whole_point_cloud = None
+            self.obs_points_base = self.pc_cam2base(self.obs_points)
+            self.target_points_base = self.pc_cam2base(self.target_points)
+            whole_point_cloud = np.concatenate([self.obs_points_base, self.target_points_base], axis=0)
+
+            grasp_poses_camera = self.setting_contact_req(obstacle_points=self.obs_points, target_points=self.target_points)
+            self.grasp_list = []
+            self.score_list = []
+            for grasp_pose_cam in grasp_poses_camera:
+                grasp_camera = np.array(grasp_pose_cam.pred_grasps_cam)
+                grasp_world = self.pose_cam2base(grasp_camera.reshape(4,4))
+                self.grasp_list.append(grasp_world)
+                self.score_list.append(grasp_pose_cam.score)
+            # if self.vis_pcd == True:
+            self.visualize_points_grasppose(whole_point_cloud, self.grasp_list)
+            print("********Init Contact GraspNet***********\n")
+            #### 
+            
+            # get env data
+            self.move_along_path(self.envir_joint)
+            time.sleep(2)
+            self.move_along_path(self.home_joint_point)
+
+            # multi-view data
+            self.get_multiview_data(single_view = True)
+            obb = self.get_oriented_bounding_box()
+            print('z_translation = {}'.format(self.get_normal_translation()))
+            o3d.visualization.draw_geometries([self.pc_segments_pcd, obb])
+            print(f"self.multiview_pc_target_base: {self.multiview_pc_target_base}")
+            print(f"self.obs_points: {self.obs_points}")
+            print("***********Finish get multiview data*************\n")
+        
+        elif msg.data == 96:
+            time.sleep(10)
+            for i in range(3):
+                # 20241114加入
+                self.points_sub = rospy.Subscriber("/uoais/Pointclouds", PointCloud2, self.points_callback)
+                self.obs_points_sub = rospy.Subscriber("/uoais/obs_pc", PointCloud2, self.obs_points_callback)
+                self.seg_pub = rospy.Publisher("/uoais/data_init", Int32, queue_size=1)
+
+                # Set init_value to None
+                self.target_points = None
+                self.obs_points = None
+                
+                # Segmentation part
+                seg_msg = Int32()
+                seg_msg.data = 2
+                self.seg_pub.publish(seg_msg)   
+                while(self.target_points is None):
+                    print(f"wait for segmentation")
+                    time.sleep(0.1) # Sleep to wait for the segmentation pointcloud arrive 
+                
+
+                print(f"self.obs_points: {self.obs_points}")
+                print("***********Init UOAIS*************\n")
+                
+                whole_point_cloud = None
+                self.obs_points_base = self.pc_cam2base(self.obs_points)
+                self.target_points_base = self.pc_cam2base(self.target_points)
+                whole_point_cloud = np.concatenate([self.obs_points_base, self.target_points_base], axis=0)
+
+                grasp_poses_camera = self.setting_contact_req(obstacle_points=self.obs_points, target_points=self.target_points)
+                self.grasp_list = []
+                self.score_list = []
+                for grasp_pose_cam in grasp_poses_camera:
+                    grasp_camera = np.array(grasp_pose_cam.pred_grasps_cam)
+                    grasp_world = self.pose_cam2base(grasp_camera.reshape(4,4))
+                    self.grasp_list.append(grasp_world)
+                    self.score_list.append(grasp_pose_cam.score)
+                # if self.vis_pcd == True:
+                # self.visualize_points_grasppose(whole_point_cloud, self.grasp_list)
+                print("********Init Contact GraspNet***********\n")
+                #### 
+                
+                # get env data
+                self.move_along_path(self.envir_joint)
+                time.sleep(2)
+                self.move_along_path(self.home_joint_point)
+
+                # multi-view data
+                self.get_multiview_data(single_view = True)
+                obb = self.get_oriented_bounding_box()
+                print('z_translation = {}'.format(self.get_normal_translation()))
+                # o3d.visualization.draw_geometries([self.pc_segments_pcd, obb])
+                print(f"self.multiview_pc_target_base: {self.multiview_pc_target_base}")
+                print(f"self.obs_points: {self.obs_points}")
+                print("***********Finish get multiview data*************\n")
+                
+                ###################origin 97##############################
+
+                if i == 0:
+                    input_value = 42125  # 接收的整数值
+                if i == 1:
+                    input_value = 12390
+                if i == 2:
+                    input_value = 112315 
+                self.parallel_or_not, self.placing_stage, self.angle_rad = self.parse_input(input_value)  # 解析阶段和角度
+                print("parallel_or_not", self.parallel_or_not)
+                print("placing_stage", self.placing_stage)
+                print("angle_rad", self.angle_rad)
+
+                print(str(self.placing_stage)[0])
+                if str(self.placing_stage)[0] == '2':
+                    self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.9)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)@ rotX(-np.pi/6)
+                elif str(self.placing_stage)[0] == '1':
+                    self.mid_retract_pose = rotZ(-np.pi/2)@ transZ(0.45)@ transX(0.3)@ transY(0.3)@ np.eye(4)@ rotZ(np.pi/4*3)@ rotX(np.pi/4*3)@ rotX(-np.pi/6)
+                
+                # Pybullet setup
+                self.actor.load_environment()
+                self.actor.env._panda.reset(self.home_joint_point[0]+[0, 0, 0])
+                self.actor.initial()
+                self.actor.grasp_checker = ValidGraspChecker(self.actor.env)
+
+            
+                place_pose_base = self.get_the_target_on_cabinet_pose_new()
+                if i == 0:
+                    placement_rot_rad = self.deg2rad(0)
+                    place_pose_base = place_pose_base@rotZ(placement_rot_rad)
+                if i == 1:
+                    placement_rot_rad = self.deg2rad(15)
+                    place_pose_base = place_pose_base@rotZ(placement_rot_rad)
+                if i == 2:
+                    placement_rot_rad = self.deg2rad(15)
+                    place_pose_base = place_pose_base@rotZ(placement_rot_rad) 
+
+                if str(self.placing_stage)[1] == '1':
+                    place_pose_base[1, 3] += 0.25
+                elif str(self.placing_stage)[1] == '2':
+                    place_pose_base[1, 3] += 0.
+                elif str(self.placing_stage)[1] == '3':
+                    place_pose_base[1, 3] += -0.25
+
+                # 用肉眼看決定角度20240719
+                print("*********************************YEAH************************")
+                if self.parallel_or_not == 1:
+                    target_pose_base = np.eye(4)
+                    self.target_center = np.mean(self.multiview_pc_target_base, axis=0)
+                    target_pose_base[:3, 3] = self.target_center[:3]
+                    target_pose_base[:3, 0] = np.array([0, 0, 1])
+                    target_pose_base[:3, 1] = np.array([-1, 0, 0])
+                    target_pose_base[:3, 2] = np.array([0, -1, 0])
+                elif self.parallel_or_not == 2:
+                    target_pose_base = np.eye(4)
+                    self.target_center = np.mean(self.multiview_pc_target_base, axis=0)
+                    target_pose_base[:3, 3] = self.target_center[:3]
+                elif self.parallel_or_not == 3 or self.parallel_or_not == 4:
+                    target_pose_base = np.eye(4)
+                    self.target_center = np.mean(self.multiview_pc_target_base, axis=0)
+                    target_pose_base[:3, 3] = self.target_center[:3]
+                    target_pose_base[:3, 0] = np.array([0, 0, 1])
+                    target_pose_base[:3, 1] = np.array([-1, 0, 0])
+                    target_pose_base[:3, 2] = np.array([0, -1, 0])
+
+                if self.parallel_or_not == 1:
+                    # parral
+                    target_pose_base = target_pose_base @ rotX(self.angle_rad)
+                    target_pose_base = target_pose_base@ rotZ(0)
+                    place_pose_base[1, 3] += 0
+                    place_pose_base[2, 3] += 0.03
+                elif self.parallel_or_not == 2:
+                    # pack
+                    target_pose_base = target_pose_base@ rotZ(self.angle_rad)
+                    place_pose_base[1, 3] += 0
+                    place_pose_base[2, 3] += 0.07
+                elif self.parallel_or_not == 3:
+                    # pile1
+                    target_pose_base = target_pose_base@ rotX(self.deg2rad(90))@ rotY(self.angle_rad)
+                    place_pose_base[1, 3] += 0
+                    place_pose_base[2, 3] += 0.03
+                elif self.parallel_or_not == 4:
+                    # pile2
+                    target_pose_base = target_pose_base@ rotX(self.deg2rad(45))@ rotY(self.angle_rad)
+                    place_pose_base[1, 3] += 0
+                    place_pose_base[2, 3] += 0.03
+                
+                
+                self.actor.env.draw_ef_coordinate(place_pose_base, 0)
+                self.actor.env.draw_ef_coordinate(target_pose_base, 0)
+                print("Place pose:", place_pose_base)
+                print("Target pose:", target_pose_base)
+                print("***********Finish get place/target pose*************\n")
+
+                # step 3: transform the grasp pose to the place pose
+                self.grasp_place_list = []
+                for grasp_pose in self.grasp_list:
+                    relative_grasp_transform = np.linalg.inv(target_pose_base)@ grasp_pose
+                    self.grasp_place_list.append(place_pose_base@ relative_grasp_transform)
+                # adjust the raw grasp pose to pre-grasp pose
+                grasp_place_list = self.grasp2pre_grasp(self.grasp_place_list, drawback_dis=0.05)
+                
+                # step 4: grasp pose filter
+                self.actor.grasp_pose_checker_base(grasp_place_list)
+                self.actor.refine_grasp_place_pose_base(self.score_list)
+               
+
+
+                # 優先選擇中間的姿態
+                if str(self.placing_stage)[0] == '2' and  str(self.placing_stage)[1] == '1':
+                    self.actor.refine_grasp_place_pose_base_in_target_pose(self.score_list)
+                    self.actor.refine_grasp_place_pose_base_in_target_pose_stage2(self.score_list, place_pose_base[:3, 3])
+                if str(self.placing_stage)[0] == '2' and  str(self.placing_stage)[1] == '3':
+                    self.actor.refine_grasp_place_pose_base_in_target_pose_stage2_newnew(self.score_list, place_pose_base[:3, 3])
+                elif str(self.placing_stage)[0] == '1':
+                    self.actor.refine_grasp_place_pose_base_in_target_pose_stage1(self.score_list, place_pose_base[:3, 3])
+
+                succuss_result = self.actor.execute_placing_checker_base(place_pose_base, target_pose_base, self.mid_retract_pose)
+                # 判断结果是否为单位矩阵
+                if isinstance(succuss_result, np.ndarray) and np.array_equal(succuss_result, np.eye(4)):
+                    print("Result is the identity matrix.")
+                    raise ValueError("No valid grasp pose")
+                else:
+                    print("Result is not the identity matrix.")
+                    success_grasp_pose, success_joint_grasp_list, success_joint_mid_list, success_joint_place_list = succuss_result
+                    print(f"success_grasp_pose: {success_grasp_pose}\n")
+                    print(f"success_joint_grasp_list: {success_joint_grasp_list}\n")
+                    print(f"success_joint_mid_list: {success_joint_mid_list}\n")
+                    print(f"success_joint_place_list: {success_joint_place_list}\n")
+
+                print("***********Finish grasp poses filtered*************\n")
+
+                print(f"列表大小: {len(success_joint_place_list)}")
+                success_joint_grasp_list = [success_joint_grasp_list[i] for i in [0, 3, 6, 9]]
+                success_joint_mid_list = [success_joint_mid_list[i] for i in [0, 2, 3, 6, 9]]
+                success_joint_place_list = [success_joint_place_list[i] for i in [0, 3, 6, 9]]
+
+                # step 5: move to the grasp pose
+                self.move_along_path_vel(np.array(success_joint_grasp_list))
+                ef_pose = self.get_ef_pose()
+                forward_mat = np.eye(4)
+                forward_mat[2, 3] = 0.05
+                ef_pose = ef_pose.dot(forward_mat)
+                quat_pose = pack_pose(ef_pose)
+                final_grasp_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
+                self.set_pose(final_grasp_pose[0], final_grasp_pose[1])
+
+                # Close gripper
+                time.sleep(1)
+                self.control_gripper("set_pose", 0.045)
+                time.sleep(1)
+                print(f"***********Finish robot grasping***********\n")
+                
+                # # step 5.5: move to the grasp pose
+                # self.move_along_path_vel(np.array(success_joint_grasp_list))
+                # ef_pose = self.get_ef_pose()
+                # forward_mat = np.eye(4)
+                # forward_mat[2, 3] = -0.05
+                # ef_pose = ef_pose.dot(forward_mat)
+                # quat_pose = pack_pose(ef_pose)
+                # final_grasp_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
+                # self.set_pose(final_grasp_pose[0], final_grasp_pose[1])
+
+                # step 6: move to the place pose
+                # 可以微調place pose!!!!
+                self.move_along_path_vel(np.array(success_joint_mid_list))
+                self.move_along_path_vel(np.array(success_joint_place_list))
+
+                # 往下輕放物體
+                if(self.parallel_or_not == 1):
+                    ef_pose = self.get_ef_pose()
+                    forward_mat = np.eye(4)
+                    forward_mat[2, 3] = -0.01
+                    ef_pose = forward_mat.dot(ef_pose)
+                    quat_pose = pack_pose(ef_pose)
+                    final_place_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
+                    self.set_pose(final_place_pose[0], final_place_pose[1])
+                    time.sleep(2)
+                else:
+                    ef_pose = self.get_ef_pose()
+                    forward_mat = np.eye(4)
+                    forward_mat[2, 3] = -0.01
+                    ef_pose = forward_mat.dot(ef_pose)
+                    quat_pose = pack_pose(ef_pose)
+                    final_place_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
+                    self.set_pose(final_place_pose[0], final_place_pose[1])
+                    time.sleep(2)
+
+                self.control_gripper("set_pose", 0.085)
+                print(f"***********Finish robot placing***********\n")
+                time.sleep(1)
+
+                # step 7: move back 5cm
+                ef_pose = self.get_ef_pose()
+                forward_mat = np.eye(4)
+                forward_mat[2, 3] -= 0.05
+                ef_pose = ef_pose.dot(forward_mat)
+                quat_pose = pack_pose(ef_pose)
+                final_pose = [quat_pose[:3], ros_quat(quat_pose[3:])]
+                self.set_pose(final_pose[0], final_pose[1])
+
+                # step 8: move back to the home joint
+                reverse_path_list = []
+                reverse_path_list = np.flip(np.array(success_joint_place_list), axis=0)
+                print(reverse_path_list.shape)
+                self.move_along_path_vel(reverse_path_list[-3:])
+                if str(self.placing_stage)[0] == '1':
+                    reverse_path_list = []
+                    reverse_path_list = np.flip(np.array(self.stage1_home_to_mid), axis=0)
+                    self.move_along_path_vel(reverse_path_list)
+                if str(self.placing_stage)[0] == '2':
+                    print("reverse path")
+                    reverse_path_list = []
+                    reverse_path_list = np.flip(np.array(self.stage2_home_to_mid), axis=0)
+                    self.move_along_path_vel(reverse_path_list)
+                print("***********Finish the placing task***********\n")
+                self.move_along_path(self.home_joint_point)
 
 
 
@@ -1552,5 +1879,5 @@ class ros_node(object):
 
 if __name__ == "__main__":
     rospy.init_node("test_realworld")
-    real_actor_node = ros_node(renders=True)
+    real_actor_node = ros_node(renders=False)
     rospy.spin()
